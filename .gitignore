@@ -1,0 +1,8 @@
+# brainstorm companion sessions (mockups, server state)
+.superpowers/
+
+node_modules/
+dist/
+.env
+.env.*
+.DS_Store

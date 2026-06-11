@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>knowflow — Brainstorm Decisions (2026-06-10)</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1.5rem; color: #1e293b; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #3b82f6; padding-bottom: .4rem; }
+  h2 { margin-top: 2rem; color: #1e3a5f; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid #cbd5e1; padding: .5rem .75rem; text-align: left; vertical-align: top; }
+  th { background: #f1f5f9; }
+  td:first-child { white-space: nowrap; font-weight: 600; }
+  .status { background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; padding: .6rem 1rem; }
+  li { margin: .25rem 0; }
+</style>
+</head>
+<body>
+<h1>knowflow — Brainstorm Decisions (2026-06-10)</h1>
+<p class="status"><strong>Status:</strong> brainstorming in progress. This captures what's decided so far; the full design spec comes after open questions close.</p>
+
+<h2>Origin / problem</h2>
+<ul>
+  <li>Team lead repeatedly prints new versions of a fishbone diagram (handling disabled accounts per user type in the district) — version drift on paper.</li>
+  <li>Wish: turn a body of text (personal notes, KB articles) into readable visual aids without learning Visio/graphics apps.</li>
+  <li>Want fast creation from presets, and easy iteration on previous diagrams (re-open and edit, not redraw).</li>
+</ul>
+
+<h2>What it is</h2>
+<p>A web app for the service desk team: paste text (KB article or notes) → AI drafts a diagram into a chosen preset → user refines in a structured editor → share with the team. Diagrams are living documents, not pictures.</p>
+
+<h2>Decisions</h2>
+<table>
+  <tr><th>Topic</th><th>Decision</th></tr>
+  <tr><td>Name</td><td><strong>knowflow</strong> (knowledge → flow)</td></tr>
+  <tr><td>Core interaction</td><td>AI text-to-diagram is the main event; only text the user explicitly pastes is sent to the AI (Claude API). No automatic KB syncing.</td></tr>
+  <tr><td>Diagram model</td><td>Every diagram is structured data (nodes/connections/preset), not a drawing. Enables editing, versioning, and dual rendering.</td></tr>
+  <tr><td>Accessibility</td><td>First-class requirement. Every preset renders two ways: visual diagram AND a screen-reader-friendly narrative view (structured outline: "Step 3 of 7: … If yes, go to step 4"). Motivated by a partially-blind teammate using read-aloud software.</td></tr>
+  <tr><td>Presets</td><td>Candidates: flowchart, decision tree, fishbone, swimlane, visual step list. Selection of v1 set + daily drivers: <strong>pending</strong>.</td></tr>
+  <tr><td>Team model</td><td>Shared team library. Anyone creates/edits drafts (visible to all); a single approver role (team lead) promotes drafts to the official version. Roles-lite: members + approver flag.</td></tr>
+  <tr><td>Versioning</td><td>History retained; exactly one official current version per process.</td></tr>
+  <tr><td>Hosting</td><td>External cloud (internal hosting rejected — no always-on machine available). Must be US-hosted, reachable from district wi-fi, behind a team login (not publicly exposed).</td></tr>
+  <tr><td>Build order</td><td>Slice 1: editor + presets + AI drafting + accessible view + export. Slice 2: shared library + drafts/approval. Data model supports approval states from day one.</td></tr>
+  <tr><td>Repo</td><td>Private (references internal district processes).</td></tr>
+</table>
+
+<h2>Open questions</h2>
+<ul>
+  <li>Which presets make v1, and which 1–2 are the daily drivers (browser question pending).</li>
+  <li>Tech stack (lean toward familiar: React/Vite/TS; backend/auth/storage TBD — Supabase a candidate, US region).</li>
+  <li>Auth approach (lightweight team login vs. per-user accounts; approval flow needs identity).</li>
+  <li>Import sources beyond paste (file upload? existing diagram import?).</li>
+  <li>Export formats (PNG/PDF for printing/embedding into KB articles).</li>
+  <li>Team size / scale assumptions (small team assumed).</li>
+</ul>
+
+<h2>Timeline goal</h2>
+<p>Usable by the team within a few weeks of 2026-06-10.</p>
+</body>
+</html>

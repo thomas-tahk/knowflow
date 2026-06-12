@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>knowflow — interactive prototype</title>
+<!-- THROWAWAY PROTOTYPE. Vanilla JS, in-memory only, no persistence.
+     Question it answers: does the editor *feel* right to use?
+     The real app will use React + React Flow (auto-layout, true canvas). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F2EA; --paper-2:#FBF8F2; --chrome:#FFFEFB;
+    --ink:#29281F; --ink-2:#5C564B; --muted:#978D7C;
+    --line:#EAE2D6; --line-2:#DED3C2;
+    --accent:#0F766E; --accent-2:#0B5D56; --accent-bg:#E4EFEC; --accent-line:#BCD8D3;
+    --step-bg:#E7EDF5; --step-ln:#9DB4D0; --step-ink:#2E435C;
+    --dec-bg:#F8EFD6; --dec-ln:#D9B968; --dec-ink:#6A4E14;
+    --out-bg:#E5F0E7; --out-ln:#92BC9B; --out-ink:#2F5236;
+    --danger:#B4452F;
+    --shadow:0 1px 2px rgba(41,40,31,.05), 0 8px 24px -12px rgba(41,40,31,.18);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Hanken Grotesk",ui-sans-serif,system-ui,sans-serif; font-size:14px; line-height:1.45;
+    -webkit-font-smoothing:antialiased; overflow:hidden}
+  .app{height:100vh; display:flex; flex-direction:column}
+
+  /* toolbar */
+  .toolbar{height:58px; flex:none; display:flex; align-items:center; gap:18px; padding:0 20px;
+    background:var(--chrome); border-bottom:1px solid var(--line)}
+  .brand{display:flex; align-items:center; gap:9px}
+  .wordmark{font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:19px; letter-spacing:-.01em}
+  .wordmark .b{color:var(--accent)}
+  .vline{width:1px; height:26px; background:var(--line-2)}
+  .doc .title{font-family:"Fraunces",Georgia,serif; font-weight:500; font-size:17px}
+  .badge{font-family:"JetBrains Mono",monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+    color:#8A6A1E; background:#F6ECD2; border:1px solid #E4CF97; padding:3px 8px; border-radius:6px; margin-left:10px}
+  .spacer{flex:1}
+  .seg{display:flex; background:var(--paper); border:1px solid var(--line-2); border-radius:10px; padding:3px}
+  .seg button{font-family:inherit; font-size:13px; font-weight:600; color:var(--ink-2); cursor:pointer; border:0;
+    background:transparent; padding:6px 14px; border-radius:7px; display:flex; align-items:center; gap:7px; transition:.15s}
+  .seg button.on{background:var(--chrome); color:var(--ink); box-shadow:0 1px 2px rgba(41,40,31,.12)}
+  .btn{font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; border-radius:9px; padding:8px 15px;
+    display:flex; align-items:center; gap:7px; transition:.15s; border:1px solid transparent}
+  .btn.ghost{background:transparent; color:var(--ink-2); border-color:var(--line-2)}
+  .btn.ghost:hover{background:var(--paper); border-color:var(--muted)}
+  .btn.solid{background:var(--accent); color:#fff}
+  .btn.solid:hover{background:var(--accent-2)}
+
+  .workspace{flex:1; display:grid; grid-template-columns:236px 1fr 320px; min-height:0}
+  .panel{background:var(--chrome); overflow-y:auto; min-height:0}
+  .panel.left{border-right:1px solid var(--line)}
+  .panel.right{border-left:1px solid var(--line)}
+  .sect{font-family:"JetBrains Mono",monospace; font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--muted); padding:18px 18px 10px}
+  .divider{height:1px; background:var(--line); margin:6px 18px}
+
+  .chip{margin:5px 12px; padding:11px 12px; display:flex; align-items:center; gap:12px; cursor:pointer;
+    border:1px solid var(--line); border-radius:12px; background:var(--paper-2); transition:.15s; user-select:none}
+  .chip:hover{border-color:var(--accent-line); box-shadow:var(--shadow); transform:translateY(-1px)}
+  .chip .glyph{width:34px; height:26px; flex:none; display:grid; place-items:center}
+  .chip .nm{font-weight:600; font-size:13.5px}
+  .chip .sub{font-size:11.5px; color:var(--muted); margin-top:1px}
+  .hint{font-size:11.5px; color:var(--muted); line-height:1.5; padding:4px 18px 14px}
+
+  /* canvas */
+  .canvas{position:relative; overflow:auto; min-height:0; background-color:#FBFAF5;
+    background-image:radial-gradient(circle, rgba(41,40,31,.07) 1.1px, transparent 1.1px);
+    background-size:24px 24px; background-position:12px 12px}
+  .surface{position:relative; width:820px; height:820px}
+  #edges{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+  .node{position:absolute; user-select:none; cursor:grab; box-shadow:var(--shadow); transition:box-shadow .12s;
+    font-weight:600; font-size:13.5px; display:flex; align-items:center; justify-content:center; text-align:center}
+  .node:active{cursor:grabbing}
+  .node.step{padding:13px 18px; max-width:210px; border-radius:12px; background:var(--step-bg);
+    border:1.5px solid var(--step-ln); color:var(--step-ink)}
+  .node.out{padding:13px 22px; max-width:210px; border-radius:999px; background:var(--out-bg);
+    border:1.5px solid var(--out-ln); color:var(--out-ink)}
+  .node.dec{width:112px; height:112px; transform:rotate(45deg); border-radius:14px; background:var(--dec-bg);
+    border:1.5px solid var(--dec-ln); color:var(--dec-ink)}
+  .node.dec .dlabel{transform:rotate(-45deg); width:128px; text-align:center; line-height:1.25}
+  .node.sel{box-shadow:0 0 0 3px var(--accent), 0 0 0 7px rgba(15,118,110,.22), var(--shadow); z-index:5}
+  .elabel{position:absolute; font-family:"JetBrains Mono",monospace; font-size:11px; font-weight:500;
+    background:#FBF8F2; border:1px solid var(--line-2); border-radius:6px; padding:1px 7px; transform:translate(-50%,-50%);
+    pointer-events:none}
+  .mock-pill{position:absolute; top:16px; right:18px; font-family:"JetBrains Mono",monospace; font-size:10.5px;
+    letter-spacing:.05em; color:var(--muted); background:var(--chrome); border:1px solid var(--line-2);
+    padding:5px 11px; border-radius:999px; box-shadow:var(--shadow); z-index:10}
+
+  /* accessible view */
+  .a11y{padding:40px 56px; max-width:720px; margin:0 auto; height:100%; overflow:auto}
+  .a11y h1{font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:26px; margin:0 0 4px}
+  .a11y .lede{color:var(--muted); margin:0 0 24px; font-size:13px}
+  .a11y ol{list-style:none; counter-reset:s; padding:0; margin:0}
+  .a11y li{counter-increment:s; position:relative; padding:16px 18px 16px 58px; margin:10px 0;
+    background:var(--chrome); border:1px solid var(--line); border-radius:14px}
+  .a11y li::before{content:counter(s); position:absolute; left:16px; top:16px; width:28px; height:28px;
+    border-radius:8px; background:var(--accent); color:#fff; font-weight:700; font-size:13px;
+    display:grid; place-items:center; font-family:"Hanken Grotesk"}
+  .a11y .ty{font-family:"JetBrains Mono",monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase}
+  .a11y .ty.step{color:var(--step-ink)} .a11y .ty.dec{color:#9A7012} .a11y .ty.out{color:var(--out-ink)}
+  .a11y .lbl{font-weight:600; font-size:16px; margin:3px 0 2px}
+  .a11y .br{font-size:13.5px; color:var(--ink-2); margin-top:6px}
+  .a11y .br b{color:var(--accent-2)}
+
+  /* inspector */
+  .ins{padding:0 18px}
+  .empty{padding:40px 22px; text-align:center; color:var(--muted); font-size:13px; line-height:1.6}
+  .tag{display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:12.5px; padding:5px 11px;
+    border-radius:8px; text-transform:capitalize}
+  .tag.step{background:var(--step-bg); color:var(--step-ink); border:1px solid var(--step-ln)}
+  .tag.dec{background:var(--dec-bg); color:var(--dec-ink); border:1px solid var(--dec-ln)}
+  .tag.out{background:var(--out-bg); color:var(--out-ink); border:1px solid var(--out-ln)}
+  .tag .dot{width:9px; height:9px; border-radius:50%; background:currentColor}
+  .field{margin:14px 0}
+  .field label{display:block; font-size:11.5px; font-weight:600; color:var(--ink-2); margin-bottom:6px}
+  textarea,select{width:100%; font-family:inherit; font-size:14px; color:var(--ink); background:var(--paper-2);
+    border:1px solid var(--line-2); border-radius:10px; padding:10px 12px; resize:none}
+  textarea:focus,select:focus{background:#fff; border-color:var(--accent);
+    outline:3px solid rgba(15,118,110,.28); outline-offset:1px}
+  .branch{display:flex; align-items:center; gap:9px; padding:9px 10px; margin:7px 0; border:1px solid var(--line);
+    border-radius:10px; background:var(--paper-2)}
+  .branch .lab{font-family:"JetBrains Mono",monospace; font-size:11px; padding:2px 8px; border-radius:6px;
+    background:var(--accent-bg); color:var(--accent-2); border:1px solid var(--accent-line)}
+  .branch .arr{color:var(--muted)} .branch .tgt{font-weight:500; font-size:13px}
+  .branch .x{margin-left:auto; color:var(--muted); cursor:pointer; font-size:16px; line-height:1; padding:0 4px}
+  .branch .x:hover{color:var(--danger)}
+  .narr{margin:6px 0; padding:13px 14px; border-radius:12px; background:var(--accent-bg); border:1px solid var(--accent-line)}
+  .narr .nh{display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--accent-2); margin-bottom:7px}
+  .narr .quote{font-family:"Fraunces",Georgia,serif; font-style:italic; font-size:14.5px; line-height:1.5; color:#234B46}
+  .narr .quote b{font-style:normal; font-weight:600}
+  .delbtn{width:100%; justify-content:center; color:var(--danger); border-color:#E3C2B8; background:transparent; margin:8px 0 18px}
+  .delbtn:hover{background:#FAF0EC; border-color:var(--danger)}
+
+  .statusbar{height:34px; flex:none; display:flex; align-items:center; gap:14px; padding:0 18px;
+    background:var(--chrome); border-top:1px solid var(--line); font-size:12px; color:var(--muted)}
+  .statusbar .k{font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--ink-2);
+    border:1px solid var(--line-2); border-radius:5px; padding:1px 5px; background:var(--paper-2)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <div class="brand"><span class="wordmark">know<span class="b">flow</span></span></div>
+    <div class="vline"></div>
+    <div class="doc"><span class="title">Handling disabled accounts</span><span class="badge">Draft</span></div>
+    <div class="spacer"></div>
+    <div class="seg">
+      <button id="tabVisual" class="on" onclick="setMode('visual')">◭ Visual</button>
+      <button id="tabA11y" onclick="setMode('accessible')">≣ Accessible</button>
+    </div>
+    <button class="btn ghost" onclick="resetDoc()">↺ Reset</button>
+    <button class="btn solid">Save</button>
+  </header>
+
+  <div class="workspace">
+    <aside class="panel left">
+      <div class="sect">Blocks — click to add</div>
+      <div class="chip" onclick="addBlock('step')">
+        <span class="glyph"><svg width="34" height="24"><rect x="3" y="4" width="28" height="16" rx="5" fill="var(--step-bg)" stroke="var(--step-ln)" stroke-width="1.5"/></svg></span>
+        <span><div class="nm">Step</div><div class="sub">An action to take</div></span>
+      </div>
+      <div class="chip" onclick="addBlock('decision')">
+        <span class="glyph"><svg width="34" height="26"><path d="M17 3 L30 13 L17 23 L4 13 Z" fill="var(--dec-bg)" stroke="var(--dec-ln)" stroke-width="1.5"/></svg></span>
+        <span><div class="nm">Decision</div><div class="sub">A yes / no branch</div></span>
+      </div>
+      <div class="chip" onclick="addBlock('outcome')">
+        <span class="glyph"><svg width="34" height="24"><rect x="3" y="5" width="28" height="15" rx="7.5" fill="var(--out-bg)" stroke="var(--out-ln)" stroke-width="1.5"/></svg></span>
+        <span><div class="nm">Outcome</div><div class="sub">Where a path ends</div></span>
+      </div>
+      <p class="hint">A new block links from whatever's selected. Drag blocks to move them. (The real app auto-arranges — here you place freely to test the feel.)</p>
+    </aside>
+
+    <main class="canvas" id="canvas" onpointerdown="canvasClick(event)">
+      <span class="mock-pill">PROTOTYPE — in-memory, nothing saved</span>
+      <div class="surface" id="surface">
+        <svg id="edges">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M1 1 L9 5 L1 9" fill="none" stroke="#B6AC9B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+      <div class="a11y" id="a11yView" style="display:none"></div>
+    </main>
+
+    <aside class="panel right" id="inspector"></aside>
+  </div>
+
+  <footer class="statusbar">
+    <span id="stat"></span>
+    <div class="spacer" style="flex:1"></div>
+    <span><span class="k">Click</span> select</span>
+    <span><span class="k">Drag</span> move</span>
+  </footer>
+</div>
+
+<script>
+// ---------- model (in memory only) ----------
+const SEED = () => ({
+  nodes: [
+    {id:'a', type:'step',     label:'Disabled-account ticket arrives', x:150, y:36},
+    {id:'b', type:'decision', label:'Account locked?',                 x:236, y:158},
+    {id:'c', type:'outcome',  label:'Unlock account',                  x:486, y:182},
+    {id:'d', type:'step',     label:'Reset password',                  x:208, y:332},
+    {id:'e', type:'decision', label:'Student account?',                x:236, y:474},
+    {id:'f', type:'outcome',  label:'Notify SIS team',                 x:486, y:498},
+    {id:'g', type:'outcome',  label:'Re-enable in AD',                 x:196, y:648},
+  ],
+  edges: [
+    {from:'a',to:'b',label:''}, {from:'b',to:'c',label:'Yes'}, {from:'b',to:'d',label:'No'},
+    {from:'d',to:'e',label:''}, {from:'e',to:'f',label:'Yes'}, {from:'e',to:'g',label:'No'},
+  ],
+});
+let doc = SEED();
+let selected = 'b';
+let mode = 'visual';
+let seq = 100;
+
+const surface = document.getElementById('surface');
+const edgesSvg = document.getElementById('edges');
+const canvas = document.getElementById('canvas');
+const TYPE_NAME = {step:'Step', decision:'Decision', outcome:'Outcome'};
+const TYPE_CLS  = {step:'step', decision:'dec', outcome:'out'};
+
+function node(id){ return doc.nodes.find(n=>n.id===id); }
+
+// ---------- render nodes ----------
+function renderNodes(){
+  [...surface.querySelectorAll('.node')].forEach(el=>el.remove());
+  for(const n of doc.nodes){
+    const el = document.createElement('div');
+    el.className = 'node ' + TYPE_CLS[n.type] + (n.id===selected?' sel':'');
+    el.style.left = n.x+'px'; el.style.top = n.y+'px';
+    el.dataset.id = n.id;
+    if(n.type==='decision'){ const d=document.createElement('div'); d.className='dlabel'; d.textContent=n.label; el.appendChild(d); }
+    else el.textContent = n.label;
+    el.addEventListener('pointerdown', e=>startDrag(e, n.id));
+    surface.appendChild(el);
+  }
+  renderEdges();
+}
+
+// ---------- render edges ----------
+function center(n){ const el=surface.querySelector(`[data-id="${n.id}"]`); return {x:n.x+el.offsetWidth/2, y:n.y+el.offsetHeight/2, el}; }
+function border(n, c, tx, ty){
+  const el=c.el; let dx=tx-c.x, dy=ty-c.y; const e=0.0001;
+  if(Math.abs(dx)<e) dx=e; if(Math.abs(dy)<e) dy=e;
+  let t;
+  if(n.type==='decision'){ const r=el.offsetWidth*0.707; t = 1/(Math.abs(dx)/r + Math.abs(dy)/r); }
+  else { t = Math.min((el.offsetWidth/2)/Math.abs(dx), (el.offsetHeight/2)/Math.abs(dy)); }
+  return {x:c.x+dx*t, y:c.y+dy*t};
+}
+function renderEdges(){
+  [...edgesSvg.querySelectorAll('.edge,.elabel')].forEach(el=>el.remove());
+  document.querySelectorAll('.elabel').forEach(el=>el.remove());
+  for(const ed of doc.edges){
+    const a=node(ed.from), b=node(ed.to); if(!a||!b) continue;
+    const ca=center(a), cb=center(b);
+    const p1=border(a,ca,cb.x,cb.y);
+    let p2=border(b,cb,ca.x,ca.y);
+    const vx=p2.x-p1.x, vy=p2.y-p1.y, len=Math.hypot(vx,vy)||1;
+    p2={x:p2.x - vx/len*7, y:p2.y - vy/len*7};
+    const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('class','edge');
+    line.setAttribute('x1',p1.x); line.setAttribute('y1',p1.y);
+    line.setAttribute('x2',p2.x); line.setAttribute('y2',p2.y);
+    line.setAttribute('stroke','#C6BCAB'); line.setAttribute('stroke-width','2');
+    line.setAttribute('marker-end','url(#arrow)');
+    edgesSvg.appendChild(line);
+    if(ed.label){
+      const lab=document.createElement('div'); lab.className='elabel'; lab.textContent=ed.label;
+      lab.style.left=((p1.x+p2.x)/2)+'px'; lab.style.top=((p1.y+p2.y)/2)+'px';
+      surface.appendChild(lab);
+    }
+  }
+}
+
+// ---------- inspector ----------
+function renderInspector(){
+  const ins=document.getElementById('inspector');
+  const n=node(selected);
+  if(!n){ ins.innerHTML='<div class="sect">Inspector</div><div class="empty">No block selected.<br>Click a block on the canvas to edit it, or add one from the left.</div>'; return; }
+  const branches=doc.edges.filter(e=>e.from===n.id);
+  ins.innerHTML = `
+    <div class="sect">Selected block</div>
+    <div class="ins">
+      <span class="tag ${TYPE_CLS[n.type]}"><span class="dot"></span>${TYPE_NAME[n.type]}</span>
+      <div class="field"><label>Label</label>
+        <textarea rows="2" oninput="updateLabel(this.value)">${escapeHtml(n.label)}</textarea></div>
+      <div class="field"><label>Block type</label>
+        <select onchange="changeType(this.value)">
+          ${['step','decision','outcome'].map(t=>`<option value="${t}" ${t===n.type?'selected':''}>${TYPE_NAME[t]}</option>`).join('')}
+        </select></div>
+    </div>
+    <div class="divider"></div>
+    <div class="sect">${n.type==='decision'?'Branches':'Leads to'}</div>
+    <div class="ins">
+      ${branches.length? branches.map(b=>{
+        const tgt=node(b.to);
+        return `<div class="branch">${b.label?`<span class="lab">${escapeHtml(b.label)}</span><span class="arr">→</span>`:'<span class="arr">→</span>'}<span class="tgt">${tgt?escapeHtml(tgt.label):'?'}</span><span class="x" onclick="deleteEdge('${b.from}','${b.to}')">×</span></div>`;
+      }).join('') : '<div class="empty" style="padding:14px 0">No outgoing connections — this is a path end.</div>'}
+    </div>
+    <div class="divider"></div>
+    <div class="sect">Accessible narration</div>
+    <div class="ins">
+      <div class="narr"><div class="nh">🔊 How read-aloud hears this</div>
+      <div class="quote">${narration(n)}</div></div>
+    </div>
+    <div class="ins"><button class="btn delbtn" onclick="deleteBlock()">Delete block</button></div>
+  `;
+}
+
+function narration(n){
+  const idx=doc.nodes.findIndex(x=>x.id===n.id)+1, total=doc.nodes.length;
+  const branches=doc.edges.filter(e=>e.from===n.id);
+  let head=`<b>Step ${idx} of ${total} · ${TYPE_NAME[n.type]}.</b> ${escapeHtml(n.label)}`;
+  if(n.type==='decision'){
+    const parts=branches.map(b=>{const t=node(b.to); return `If ${escapeHtml(b.label||'—')}, go to ${t?escapeHtml(t.label):'?'}`;});
+    return head + (parts.length?'. '+parts.join('. ')+'.':'.');
+  }
+  if(n.type==='outcome') return head + '. This is an outcome — the path ends here.';
+  if(branches.length){ const t=node(branches[0].to); return head + `. Then continue to ${t?escapeHtml(t.label):'?'}.`; }
+  return head+'.';
+}
+
+// ---------- accessible view ----------
+function renderA11y(){
+  const v=document.getElementById('a11yView');
+  v.innerHTML = `<h1>Handling disabled accounts</h1>
+    <p class="lede">Accessible outline — generated from the same document the diagram uses. ${doc.nodes.length} steps.</p>
+    <ol>${doc.nodes.map(n=>{
+      const branches=doc.edges.filter(e=>e.from===n.id);
+      const br = branches.length
+        ? branches.map(b=>{const t=node(b.to); return `<div class="br">${b.label?`<b>If ${escapeHtml(b.label)}:</b> `:'<b>Then:</b> '}go to “${t?escapeHtml(t.label):'?'}”</div>`;}).join('')
+        : (n.type==='outcome'?'<div class="br"><b>Outcome —</b> the path ends here.</div>':'');
+      return `<li><span class="ty ${TYPE_CLS[n.type]}">${TYPE_NAME[n.type]}</span><div class="lbl">${escapeHtml(n.label)}</div>${br}</li>`;
+    }).join('')}</ol>`;
+}
+
+// ---------- actions ----------
+function selectNode(id){ selected=id; renderNodes(); renderInspector(); }
+function updateLabel(val){
+  const n=node(selected); if(!n) return; n.label=val;
+  const el=surface.querySelector(`[data-id="${selected}"]`);
+  if(n.type==='decision') el.querySelector('.dlabel').textContent=val; else el.textContent=val;
+  renderEdges();
+  // refresh just the narration quote live
+  const q=document.querySelector('#inspector .quote'); if(q) q.innerHTML=narration(n);
+}
+function changeType(t){ const n=node(selected); if(!n) return; n.type=t; renderNodes(); renderInspector(); }
+function addBlock(type){
+  const id='n'+(seq++);
+  const sx=canvas.scrollLeft+260+Math.round((seq%5)*22), sy=canvas.scrollTop+140+Math.round((seq%7)*20);
+  doc.nodes.push({id, type, label:'New '+type, x:sx, y:sy});
+  if(selected && node(selected)) doc.edges.push({from:selected, to:id, label: node(selected).type==='decision'?'Yes':''});
+  selected=id; renderNodes(); renderInspector(); updateStat();
+}
+function deleteBlock(){
+  if(!selected) return;
+  doc.nodes=doc.nodes.filter(n=>n.id!==selected);
+  doc.edges=doc.edges.filter(e=>e.from!==selected && e.to!==selected);
+  selected=null; renderNodes(); renderInspector(); updateStat();
+}
+function deleteEdge(from,to){ doc.edges=doc.edges.filter(e=>!(e.from===from&&e.to===to)); renderNodes(); renderInspector(); updateStat(); }
+function canvasClick(e){ if(e.target===canvas||e.target===surface||e.target===edgesSvg){ selected=null; renderNodes(); renderInspector(); } }
+function resetDoc(){ doc=SEED(); selected='b'; seq=100; renderNodes(); renderInspector(); updateStat(); }
+
+// ---------- drag ----------
+let drag=null;
+function startDrag(e, id){
+  e.stopPropagation();
+  if(selected!==id){ selected=id; renderNodes(); renderInspector(); }
+  const n=node(id); const el=surface.querySelector(`[data-id="${id}"]`);
+  drag={id, dx:e.clientX - n.x, dy:e.clientY - n.y, el, moved:false};
+  el.setPointerCapture(e.pointerId);
+  el.addEventListener('pointermove', onDrag);
+  el.addEventListener('pointerup', endDrag, {once:true});
+}
+function onDrag(e){
+  if(!drag) return; const n=node(drag.id);
+  n.x=Math.max(0, e.clientX-drag.dx); n.y=Math.max(0, e.clientY-drag.dy);
+  drag.el.style.left=n.x+'px'; drag.el.style.top=n.y+'px';
+  renderEdges();
+}
+function endDrag(e){ if(drag){ drag.el.removeEventListener('pointermove', onDrag); drag=null; } }
+
+// ---------- view mode ----------
+function setMode(m){
+  mode=m;
+  document.getElementById('tabVisual').classList.toggle('on', m==='visual');
+  document.getElementById('tabA11y').classList.toggle('on', m==='accessible');
+  document.getElementById('surface').style.display = m==='visual'?'block':'none';
+  document.getElementById('a11yView').style.display = m==='visual'?'none':'block';
+  document.querySelector('.mock-pill').style.display = m==='visual'?'block':'none';
+  if(m==='accessible') renderA11y();
+}
+function updateStat(){ document.getElementById('stat').textContent=`${doc.nodes.length} blocks · ${doc.edges.length} connections · Flowchart preset`; }
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// ---------- init ----------
+renderNodes(); renderInspector(); updateStat();
+</script>
+</body>
+</html>

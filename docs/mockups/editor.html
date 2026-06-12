@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>knowflow — editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F2EA; --paper-2:#FBF8F2; --chrome:#FFFEFB;
+    --ink:#29281F; --ink-2:#5C564B; --muted:#978D7C;
+    --line:#EAE2D6; --line-2:#DED3C2;
+    --accent:#0F766E; --accent-2:#0B5D56; --accent-bg:#E4EFEC; --accent-line:#BCD8D3;
+    --step-bg:#E7EDF5; --step-ln:#9DB4D0; --step-ink:#2E435C;
+    --dec-bg:#F8EFD6; --dec-ln:#D9B968; --dec-ink:#6A4E14;
+    --out-bg:#E5F0E7; --out-ln:#92BC9B; --out-ink:#2F5236;
+    --danger:#B4452F;
+    --shadow:0 1px 2px rgba(41,40,31,.05), 0 8px 24px -12px rgba(41,40,31,.18);
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Hanken Grotesk",ui-sans-serif,system-ui,sans-serif;
+    font-size:14px; line-height:1.45; -webkit-font-smoothing:antialiased;
+  }
+  .app{height:100vh; display:flex; flex-direction:column; overflow:hidden}
+
+  /* ---------- toolbar ---------- */
+  .toolbar{
+    height:58px; flex:none; display:flex; align-items:center; gap:18px;
+    padding:0 20px; background:var(--chrome); border-bottom:1px solid var(--line);
+    animation:rise .5s ease both;
+  }
+  .brand{display:flex; align-items:center; gap:9px}
+  .mark{width:24px; height:24px; flex:none}
+  .wordmark{font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:19px; letter-spacing:-.01em}
+  .wordmark .b{color:var(--accent)}
+  .vline{width:1px; height:26px; background:var(--line-2)}
+  .doc{display:flex; align-items:center; gap:10px; min-width:0}
+  .doc .title{font-family:"Fraunces",Georgia,serif; font-weight:500; font-size:17px; color:var(--ink); white-space:nowrap}
+  .doc .pencil{color:var(--muted); display:flex}
+  .badge{
+    font-family:"JetBrains Mono",monospace; font-size:10.5px; font-weight:500; letter-spacing:.06em;
+    text-transform:uppercase; color:#8A6A1E; background:#F6ECD2; border:1px solid #E4CF97;
+    padding:3px 8px; border-radius:6px;
+  }
+  .spacer{flex:1}
+  .seg{display:flex; background:var(--paper); border:1px solid var(--line-2); border-radius:10px; padding:3px}
+  .seg button{
+    font-family:inherit; font-size:13px; font-weight:600; color:var(--ink-2); cursor:pointer;
+    border:0; background:transparent; padding:6px 14px; border-radius:7px; display:flex; align-items:center; gap:7px;
+    transition:.15s;
+  }
+  .seg button.on{background:var(--chrome); color:var(--ink); box-shadow:0 1px 2px rgba(41,40,31,.12)}
+  .seg button svg{opacity:.8}
+  .btn{
+    font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; border-radius:9px;
+    padding:8px 15px; display:flex; align-items:center; gap:7px; transition:.15s; border:1px solid transparent;
+  }
+  .btn.ghost{background:transparent; color:var(--ink-2); border-color:var(--line-2)}
+  .btn.ghost:hover{background:var(--paper); border-color:var(--muted)}
+  .btn.solid{background:var(--accent); color:#fff; box-shadow:0 1px 2px rgba(15,118,110,.4)}
+  .btn.solid:hover{background:var(--accent-2)}
+  .avatar{
+    width:30px; height:30px; border-radius:50%; flex:none; display:grid; place-items:center;
+    background:linear-gradient(135deg,#1B8C82,#0B5d56); color:#fff; font-size:11.5px; font-weight:700;
+    font-family:"Hanken Grotesk"; box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.25);
+  }
+
+  /* ---------- workspace ---------- */
+  .workspace{flex:1; display:grid; grid-template-columns:236px 1fr 320px; min-height:0}
+  .panel{background:var(--chrome); overflow-y:auto; min-height:0}
+  .panel.left{border-right:1px solid var(--line); animation:rise .5s .05s ease both}
+  .panel.right{border-left:1px solid var(--line); animation:rise .5s .1s ease both}
+  .sect{font-family:"JetBrains Mono",monospace; font-size:10.5px; font-weight:500; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--muted); padding:18px 18px 10px}
+  .divider{height:1px; background:var(--line); margin:6px 18px}
+
+  /* palette chips */
+  .chip{
+    margin:5px 12px; padding:11px 12px; display:flex; align-items:center; gap:12px; cursor:grab;
+    border:1px solid var(--line); border-radius:12px; background:var(--paper-2); transition:.15s;
+  }
+  .chip:hover{border-color:var(--accent-line); box-shadow:var(--shadow); transform:translateY(-1px)}
+  .chip .glyph{width:34px; height:26px; flex:none; display:grid; place-items:center}
+  .chip .nm{font-weight:600; font-size:13.5px; color:var(--ink)}
+  .chip .sub{font-size:11.5px; color:var(--muted); margin-top:1px}
+  .chip .key{margin-left:auto; font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--ink-2);
+    border:1px solid var(--line-2); border-bottom-width:2px; border-radius:6px; padding:2px 7px; background:var(--chrome)}
+  .hint{font-size:11.5px; color:var(--muted); line-height:1.5; padding:4px 18px 14px}
+
+  .preset{margin:5px 12px; padding:11px 13px; display:flex; align-items:center; gap:10px;
+    border:1px solid var(--line-2); border-radius:12px; background:var(--chrome); cursor:pointer}
+  .preset .pn{font-weight:600}
+  .preset .cnt{margin-left:auto; font-size:11.5px; color:var(--muted)}
+
+  /* ---------- canvas ---------- */
+  .canvas{
+    position:relative; overflow:auto; min-height:0;
+    background-color:#FBFAF5;
+    background-image:radial-gradient(circle, rgba(41,40,31,.07) 1.1px, transparent 1.1px);
+    background-size:24px 24px; background-position:12px 12px;
+    display:flex; align-items:flex-start; justify-content:center;
+    animation:rise .5s .04s ease both;
+  }
+  .stagewrap{padding:46px 40px 80px}
+  .flow{width:560px; max-width:100%; height:auto; filter:drop-shadow(0 18px 30px rgba(41,40,31,.06))}
+  .mock-pill{
+    position:absolute; top:16px; right:18px; font-family:"JetBrains Mono",monospace; font-size:10.5px;
+    letter-spacing:.05em; color:var(--muted); background:var(--chrome); border:1px solid var(--line-2);
+    padding:5px 11px; border-radius:999px; box-shadow:var(--shadow);
+  }
+
+  /* ---------- inspector ---------- */
+  .ins{padding:0 18px}
+  .tag{display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:12.5px;
+    padding:5px 11px; border-radius:8px; background:var(--dec-bg); color:var(--dec-ink); border:1px solid var(--dec-ln)}
+  .tag .dot{width:9px;height:9px;border-radius:50%;background:var(--dec-ink)}
+  .field{margin:14px 0}
+  .field label{display:block; font-size:11.5px; font-weight:600; color:var(--ink-2); margin-bottom:6px}
+  textarea,.select{
+    width:100%; font-family:inherit; font-size:14px; color:var(--ink); background:var(--paper-2);
+    border:1px solid var(--line-2); border-radius:10px; padding:10px 12px; resize:none;
+  }
+  textarea.focus{
+    background:#fff; border-color:var(--accent);
+    outline:3px solid rgba(15,118,110,.28); outline-offset:1px;
+  }
+  .select{display:flex; align-items:center; justify-content:space-between; cursor:pointer}
+  .branch{display:flex; align-items:center; gap:9px; padding:9px 10px; margin:7px 0;
+    border:1px solid var(--line); border-radius:10px; background:var(--paper-2)}
+  .branch .lab{font-family:"JetBrains Mono",monospace; font-size:11px; font-weight:500; padding:2px 8px; border-radius:6px}
+  .branch .lab.y{background:var(--out-bg); color:var(--out-ink); border:1px solid var(--out-ln)}
+  .branch .lab.n{background:#F3E7E2; color:#8A4632; border:1px solid #D9B3A6}
+  .branch .arr{color:var(--muted)}
+  .branch .tgt{font-weight:500; font-size:13px}
+  .branch .x{margin-left:auto; color:var(--muted); cursor:pointer; font-size:15px; line-height:1}
+  .addbtn{width:100%; justify-content:center; margin-top:4px}
+
+  .narr{
+    margin:6px 0 4px; padding:13px 14px; border-radius:12px; background:var(--accent-bg);
+    border:1px solid var(--accent-line); position:relative;
+  }
+  .narr .nh{display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--accent-2); margin-bottom:7px}
+  .narr .quote{font-family:"Fraunces",Georgia,serif; font-style:italic; font-size:14.5px; line-height:1.5; color:#234B46}
+  .narr .quote b{font-style:normal; font-weight:600}
+
+  .delbtn{width:100%; justify-content:center; color:var(--danger); border-color:#E3C2B8; background:transparent; margin:6px 0 18px}
+  .delbtn:hover{background:#FAF0EC; border-color:var(--danger)}
+
+  /* ---------- statusbar ---------- */
+  .statusbar{
+    height:34px; flex:none; display:flex; align-items:center; gap:16px; padding:0 18px;
+    background:var(--chrome); border-top:1px solid var(--line); font-size:12px; color:var(--muted);
+    animation:rise .5s .12s ease both;
+  }
+  .statusbar .k{font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--ink-2);
+    border:1px solid var(--line-2); border-radius:5px; padding:1px 5px; background:var(--paper-2)}
+  .statusbar .grp{display:flex; align-items:center; gap:7px}
+
+  @keyframes rise{from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOOLBAR -->
+  <header class="toolbar">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 24 24" fill="none">
+        <circle cx="5" cy="6" r="3" fill="#0F766E"/>
+        <circle cx="19" cy="6" r="2.4" fill="#D9B968"/>
+        <circle cx="12" cy="18" r="3" fill="#92BC9B"/>
+        <path d="M5 6 L12 18 M19 6 L12 18" stroke="#29281F" stroke-width="1.4" stroke-opacity=".55"/>
+      </svg>
+      <span class="wordmark">know<span class="b">flow</span></span>
+    </div>
+    <div class="vline"></div>
+    <div class="doc">
+      <span class="title">Handling disabled accounts</span>
+      <span class="pencil" title="Rename">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </span>
+      <span class="badge">Draft</span>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="seg" role="tablist" aria-label="View mode">
+      <button class="on" role="tab" aria-selected="true">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h4a3 3 0 0 1 3 3V14"/></svg>
+        Visual
+      </button>
+      <button role="tab" aria-selected="false">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        Accessible
+      </button>
+    </div>
+    <button class="btn ghost">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+      Export
+    </button>
+    <button class="btn solid">Save</button>
+    <div class="avatar" title="Thomas Tahk">TT</div>
+  </header>
+
+  <!-- WORKSPACE -->
+  <div class="workspace">
+
+    <!-- LEFT: palette -->
+    <aside class="panel left">
+      <div class="sect">Blocks</div>
+
+      <div class="chip">
+        <span class="glyph"><svg width="34" height="24"><rect x="3" y="4" width="28" height="16" rx="5" fill="var(--step-bg)" stroke="var(--step-ln)" stroke-width="1.5"/></svg></span>
+        <span><div class="nm">Step</div><div class="sub">An action to take</div></span>
+        <span class="key">S</span>
+      </div>
+      <div class="chip">
+        <span class="glyph"><svg width="34" height="26"><path d="M17 3 L30 13 L17 23 L4 13 Z" fill="var(--dec-bg)" stroke="var(--dec-ln)" stroke-width="1.5"/></svg></span>
+        <span><div class="nm">Decision</div><div class="sub">A yes / no branch</div></span>
+        <span class="key">D</span>
+      </div>
+      <div class="chip">
+        <span class="glyph"><svg width="34" height="24"><rect x="3" y="5" width="28" height="15" rx="7.5" fill="var(--out-bg)" stroke="var(--out-ln)" stroke-width="1.5"/></svg></span>
+        <span><div class="nm">Outcome</div><div class="sub">Where a path ends</div></span>
+        <span class="key">O</span>
+      </div>
+
+      <p class="hint">Drag onto the canvas or press the key. The preset handles all positioning — you never place blocks by hand.</p>
+
+      <div class="divider"></div>
+      <div class="sect">Preset</div>
+      <div class="preset">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h4a3 3 0 0 1 3 3V14"/></svg>
+        <span class="pn">Flowchart</span>
+        <span class="cnt">1 of 4 ⌄</span>
+      </div>
+    </aside>
+
+    <!-- CENTER: canvas -->
+    <main class="canvas">
+      <span class="mock-pill">MOCKUP — not yet functional</span>
+      <div class="stagewrap">
+        <svg class="flow" viewBox="96 4 580 676" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Flowchart: handling disabled accounts">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M1 1 L9 5 L1 9" fill="none" stroke="#B6AC9B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+            <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+              <feDropShadow dx="0" dy="2" stdDeviation="3.5" flood-color="#29281F" flood-opacity="0.12"/>
+            </filter>
+            <filter id="selglow" x="-60%" y="-60%" width="220%" height="220%">
+              <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#0F766E" flood-opacity="0.35"/>
+            </filter>
+          </defs>
+
+          <!-- edges -->
+          <g stroke="#C6BCAB" stroke-width="2" fill="none">
+            <path d="M280 84 L280 116" marker-end="url(#arrow)"/>
+            <path d="M374 178 L466 178" marker-end="url(#arrow)"/>
+            <path d="M280 240 L280 296" marker-end="url(#arrow)"/>
+            <path d="M280 360 L280 416" marker-end="url(#arrow)"/>
+            <path d="M374 478 L466 478" marker-end="url(#arrow)"/>
+            <path d="M280 540 L280 596" marker-end="url(#arrow)"/>
+          </g>
+
+          <!-- branch labels -->
+          <g font-family="JetBrains Mono, monospace" font-size="11" font-weight="500">
+            <g><rect x="404" y="167" width="34" height="20" rx="6" fill="#FBF8F2" stroke="#DED3C2"/><text x="421" y="181" text-anchor="middle" fill="#2F5236">Yes</text></g>
+            <g><rect x="290" y="258" width="30" height="20" rx="6" fill="#FBF8F2" stroke="#DED3C2"/><text x="305" y="272" text-anchor="middle" fill="#8A4632">No</text></g>
+            <g><rect x="404" y="467" width="34" height="20" rx="6" fill="#FBF8F2" stroke="#DED3C2"/><text x="421" y="481" text-anchor="middle" fill="#2F5236">Yes</text></g>
+            <g><rect x="290" y="558" width="30" height="20" rx="6" fill="#FBF8F2" stroke="#DED3C2"/><text x="305" y="572" text-anchor="middle" fill="#8A4632">No</text></g>
+          </g>
+
+          <g font-family="Hanken Grotesk, sans-serif" font-size="15" font-weight="600" text-anchor="middle">
+            <!-- A: step -->
+            <g filter="url(#soft)">
+              <rect x="150" y="26" width="260" height="58" rx="14" fill="var(--step-bg)" stroke="var(--step-ln)" stroke-width="1.5"/>
+              <text x="280" y="60" fill="var(--step-ink)">Disabled-account ticket arrives</text>
+            </g>
+
+            <!-- B: decision (SELECTED) -->
+            <g filter="url(#selglow)">
+              <path d="M280 116 L376 178 L280 240 L184 178 Z" fill="var(--dec-bg)" stroke="var(--accent)" stroke-width="2.5"/>
+            </g>
+            <text x="280" y="183" fill="var(--dec-ink)">Account locked?</text>
+            <g fill="var(--accent)">
+              <rect x="276" y="112" width="8" height="8" rx="1.5"/><rect x="372" y="174" width="8" height="8" rx="1.5"/>
+              <rect x="276" y="236" width="8" height="8" rx="1.5"/><rect x="180" y="174" width="8" height="8" rx="1.5"/>
+            </g>
+
+            <!-- C: outcome -->
+            <g filter="url(#soft)">
+              <rect x="466" y="149" width="180" height="58" rx="29" fill="var(--out-bg)" stroke="var(--out-ln)" stroke-width="1.5"/>
+              <text x="556" y="183" fill="var(--out-ink)">Unlock account</text>
+            </g>
+
+            <!-- D: step -->
+            <g filter="url(#soft)">
+              <rect x="160" y="298" width="240" height="58" rx="14" fill="var(--step-bg)" stroke="var(--step-ln)" stroke-width="1.5"/>
+              <text x="280" y="332" fill="var(--step-ink)">Reset password</text>
+            </g>
+
+            <!-- E: decision -->
+            <g filter="url(#soft)">
+              <path d="M280 416 L376 478 L280 540 L184 478 Z" fill="var(--dec-bg)" stroke="var(--dec-ln)" stroke-width="1.5"/>
+              <text x="280" y="483" fill="var(--dec-ink)">Student account?</text>
+            </g>
+
+            <!-- F: outcome -->
+            <g filter="url(#soft)">
+              <rect x="466" y="449" width="180" height="58" rx="29" fill="var(--out-bg)" stroke="var(--out-ln)" stroke-width="1.5"/>
+              <text x="556" y="483" fill="var(--out-ink)">Notify SIS team</text>
+            </g>
+
+            <!-- G: outcome -->
+            <g filter="url(#soft)">
+              <rect x="170" y="598" width="220" height="58" rx="29" fill="var(--out-bg)" stroke="var(--out-ln)" stroke-width="1.5"/>
+              <text x="280" y="632" fill="var(--out-ink)">Re-enable in AD</text>
+            </g>
+          </g>
+        </svg>
+      </div>
+    </main>
+
+    <!-- RIGHT: inspector -->
+    <aside class="panel right">
+      <div class="sect">Selected block</div>
+      <div class="ins">
+        <span class="tag"><span class="dot"></span>Decision</span>
+
+        <div class="field">
+          <label>Label</label>
+          <textarea class="focus" rows="2">Account locked?</textarea>
+        </div>
+
+        <div class="field">
+          <label>Block type</label>
+          <div class="select">Decision
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+      <div class="sect">Branches</div>
+      <div class="ins">
+        <div class="branch"><span class="lab y">Yes</span><span class="arr">→</span><span class="tgt">Unlock account</span><span class="x">×</span></div>
+        <div class="branch"><span class="lab n">No</span><span class="arr">→</span><span class="tgt">Reset password</span><span class="x">×</span></div>
+        <button class="btn ghost addbtn">+ Add branch</button>
+      </div>
+
+      <div class="divider"></div>
+      <div class="sect">Accessible narration</div>
+      <div class="ins">
+        <div class="narr">
+          <div class="nh">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10v4h4l5 5V5L7 10H3Z"/><path d="M16 9a3 3 0 0 1 0 6"/></svg>
+            How read-aloud hears this
+          </div>
+          <div class="quote"><b>Step 2 of 6 · Decision.</b> Account locked? If yes, go to Unlock account. If no, continue to Reset password.</div>
+        </div>
+      </div>
+
+      <div class="ins">
+        <button class="btn delbtn">Delete block</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- STATUSBAR -->
+  <footer class="statusbar">
+    <span class="grp">6 blocks · 5 connections</span>
+    <div class="vline" style="height:16px"></div>
+    <span class="grp">Flowchart preset</span>
+    <div class="spacer" style="flex:1"></div>
+    <span class="grp"><span class="k">Tab</span> navigate</span>
+    <span class="grp"><span class="k">↵</span> edit</span>
+    <span class="grp"><span class="k">⌘</span><span class="k">S</span> save</span>
+    <div class="vline" style="height:16px"></div>
+    <span class="grp">100%</span>
+  </footer>
+</div>
+</body>
+</html>

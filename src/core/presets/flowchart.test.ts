@@ -60,4 +60,23 @@ describe('flowchart preset', () => {
     });
     expect(flowchart.narrationOrder(d).map(b => b.id)).toEqual(['a', 'b', 'c']);
   });
+
+  it('includes every block exactly once when a disconnected cycle island is present', () => {
+    const d = doc({
+      blocks: [
+        { id: 'R', type: 'step', text: 'Root' },
+        { id: 'S', type: 'outcome', text: 'End' },
+        { id: 'A', type: 'step', text: 'Island A' },
+        { id: 'B', type: 'step', text: 'Island B' },
+      ],
+      connections: [
+        { id: 'e1', from: 'R', to: 'S' },
+        { id: 'e2', from: 'A', to: 'B' },
+        { id: 'e3', from: 'B', to: 'A' },
+      ],
+    });
+    const ids = flowchart.narrationOrder(d).map(b => b.id);
+    expect(ids.length).toBe(d.blocks.length);
+    expect([...ids].sort()).toEqual(d.blocks.map(b => b.id).sort());
+  });
 });

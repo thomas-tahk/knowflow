@@ -48,6 +48,7 @@ export function bfsOrder(doc: KnowflowDoc): Block[] {
     if (b) ordered.push(b);
     for (const next of out.get(id) ?? []) if (!seen.has(next)) queue.push(next);
   }
+  // Append blocks unreached by BFS (disconnected islands, e.g. cycles with no root) in document order.
   for (const b of doc.blocks) if (!seen.has(b.id)) ordered.push(b);
   return ordered;
 }

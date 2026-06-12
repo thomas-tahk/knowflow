@@ -33,4 +33,14 @@ describe('serialize', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors.some(e => e.code === 'spine-count')).toBe(true);
   });
+
+  it('rejects a document with a non-object element in "connections" without throwing', () => {
+    const result = importJson(JSON.stringify({ id: 'x', title: 'T', preset: 'flowchart', blocks: [], connections: [null], meta: { createdAt: 'x', updatedAt: 'x', status: 'draft', version: 1 } }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects a document with a non-object element in "blocks" without throwing', () => {
+    const result = importJson(JSON.stringify({ id: 'x', title: 'T', preset: 'flowchart', blocks: [null], connections: [], meta: { createdAt: 'x', updatedAt: 'x', status: 'draft', version: 1 } }));
+    expect(result.ok).toBe(false);
+  });
 });

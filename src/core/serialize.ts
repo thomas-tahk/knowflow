@@ -38,8 +38,16 @@ function checkShape(value: unknown): ValidationError[] {
   if (typeof v.id !== 'string') errors.push({ code: 'invalid-shape', message: 'Missing "id".' });
   if (typeof v.title !== 'string') errors.push({ code: 'invalid-shape', message: 'Missing "title".' });
   if (!ALL_PRESETS.includes(v.preset as never)) errors.push({ code: 'unknown-preset', message: `Unknown preset "${String(v.preset)}".` });
-  if (!Array.isArray(v.blocks)) errors.push({ code: 'invalid-shape', message: '"blocks" must be an array.' });
-  if (!Array.isArray(v.connections)) errors.push({ code: 'invalid-shape', message: '"connections" must be an array.' });
+  if (!Array.isArray(v.blocks)) {
+    errors.push({ code: 'invalid-shape', message: '"blocks" must be an array.' });
+  } else if (v.blocks.some(b => typeof b !== 'object' || b === null)) {
+    errors.push({ code: 'invalid-shape', message: '"blocks" must contain only objects.' });
+  }
+  if (!Array.isArray(v.connections)) {
+    errors.push({ code: 'invalid-shape', message: '"connections" must be an array.' });
+  } else if (v.connections.some(c => typeof c !== 'object' || c === null)) {
+    errors.push({ code: 'invalid-shape', message: '"connections" must contain only objects.' });
+  }
   if (typeof v.meta !== 'object' || v.meta === null) errors.push({ code: 'invalid-shape', message: 'Missing "meta".' });
   return errors;
 }

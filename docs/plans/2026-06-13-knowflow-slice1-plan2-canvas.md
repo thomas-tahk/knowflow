@@ -22,7 +22,7 @@
 
 ## Design decisions locked for this plan
 
-- **All four presets render in React Flow** (one canvas, one selection model — keeps Plan 3's editing uniform). Fishbone is modeled in the core via `categoryId` attachment with an empty `connections` array; for *rendering only*, the adapter synthesizes straight rib edges (cause→category, category→spine). The true angled-rib aesthetic is deferred polish, noted in code.
+- **All four presets render in React Flow** (one canvas, one selection model — keeps Plan 3's editing uniform). Fishbone is modeled in the core via `categoryId` attachment with an empty `connections` array; for *rendering only*, the adapter synthesizes **diagonal rib edges** (cause→category, category→spine) drawn with a custom **floating straight edge** so the bones slant like a real Ishikawa diagram. This is iteration zero of the fishbone look — bones converge diagonally on the effect box. A later iteration can add synthetic spine-joint nodes so bones meet a horizontal spine line at distinct points, and Plan 3 may add drag-with-snap; both are noted as future polish, not built here.
 - **Layout is pure and separate from React.** `layoutDoc(doc)` returns positions; the canvas just consumes them. This keeps layout unit-testable with zero DOM.
 - **One node component, four shapes.** `KnowflowNode` switches shape (rect / diamond / pill) by block type using a shared style table, and exposes four handles (`t` target, `b` source, `l` target, `r` source) so the adapter can attach edges directionally per preset.
 - **Read-only this plan.** No editing yet; the canvas renders and allows selection (selection is surfaced but unused until Plan 3).
@@ -36,6 +36,8 @@
 - `src/layout/fishboneLayout.ts` — spine + alternating categories + stacked causes.
 - `src/layout/index.ts` — `layoutDoc(doc)` dispatcher by preset; returns `Positions`.
 - `src/canvas/adapter.ts` — `toReactFlow(doc, positions)` → `{ nodes, edges }` (pure).
+- `src/canvas/floatingEdge.ts` — `getEdgeParams(source, target)` border-intersection helper (pure) for diagonal fishbone bones.
+- `src/canvas/FloatingEdge.tsx` — custom React Flow edge drawing a straight line between node borders (the diagonal rib).
 - `src/canvas/blockStyles.ts` — block-type → `{ shape, bg, border, ink, size }` style table.
 - `src/canvas/KnowflowNode.tsx` — custom node component (rect/diamond/pill + 4 handles).
 - `src/canvas/DiagramCanvas.tsx` — `<ReactFlow>` wrapper (read-only, fitView, Background, Controls).
@@ -514,7 +516,8 @@ export function fishboneLayout(doc: KnowflowDoc): Positions {
     const causes = doc.blocks.filter((b: Block) => b.type === 'cause' && b.categoryId === cat.id);
     causes.forEach((cause, j) => {
       const step = (j + 1) * CAUSE_GAP;
-      positions[cause.id] = { x: x - 40, y: above ? catY - step : catY + step };
+      // Offset causes outward in BOTH axes so each cause->category bone renders as a diagonal twig.
+      positions[cause.id] = { x: x - step * 0.6, y: above ? catY - step : catY + step };
     });
   });
 
@@ -693,6 +696,7 @@ describe('toReactFlow adapter', () => {
     const { edges } = toReactFlow(doc, layoutDoc(doc));
     const pairs = edges.map(e => [e.source, e.target]).sort();
     expect(pairs).toEqual([['c1', 's'], ['ca1', 'c1']].sort());
+    expect(edges.every(e => e.type === 'floating')).toBe(true);
   });
 });
 ```
@@ -748,12 +752,14 @@ function sequenceEdges(doc: KnowflowDoc): Edge[] {
 function ribEdges(doc: KnowflowDoc): Edge[] {
   const edges: Edge[] = [];
   const spine = doc.blocks.find(b => b.type === 'spine');
+  // type 'floating' = our custom diagonal edge (Task 8); it computes endpoints from node
+  // geometry, so no sourceHandle/targetHandle is set and the line follows the true slant.
   for (const cat of doc.blocks.filter(b => b.type === 'category')) {
     if (spine) {
-      edges.push({ id: `rib-${cat.id}-${spine.id}`, source: cat.id, target: spine.id, type: 'straight', sourceHandle: 'r', targetHandle: 'l', markerEnd: MARKER });
+      edges.push({ id: `rib-${cat.id}-${spine.id}`, source: cat.id, target: spine.id, type: 'floating', markerEnd: MARKER });
     }
     for (const cause of doc.blocks.filter(b => b.type === 'cause' && b.categoryId === cat.id)) {
-      edges.push({ id: `rib-${cause.id}-${cat.id}`, source: cause.id, target: cat.id, type: 'straight', sourceHandle: 'r', targetHandle: 'l', markerEnd: MARKER });
+      edges.push({ id: `rib-${cause.id}-${cat.id}`, source: cause.id, target: cat.id, type: 'floating', markerEnd: MARKER });
     }
   }
   return edges;
@@ -786,13 +792,125 @@ git commit -m "feat(canvas): document-to-ReactFlow adapter"
 
 ---
 
-## Task 8: Custom node component
+## Task 8: Floating diagonal edge (fishbone bones)
+
+**Files:**
+- Create: `src/canvas/floatingEdge.ts`
+- Create: `src/canvas/FloatingEdge.tsx`
+- Test: `src/canvas/floatingEdge.test.ts`
+
+A custom edge that draws a straight line between the **borders** of its two nodes, computed from node geometry rather than fixed handles — so a category-to-spine or cause-to-category connection renders as a true diagonal. `getEdgeParams` is the border-intersection helper from the official React Flow v12 floating-edges example (verified: reads `node.internals.positionAbsolute` and `node.measured.width/height` — the v12 field names; v11's `positionAbsolute`/`width` would return `undefined` and produce `NaN`).
+
+- [ ] **Step 1: Write the failing test for `getEdgeParams`**
+
+```ts
+// src/canvas/floatingEdge.test.ts
+import { describe, it, expect } from 'vitest';
+import { getEdgeParams } from './floatingEdge';
+
+// Minimal InternalNode stand-in (only the fields getEdgeParams reads).
+function fakeNode(x: number, y: number, width = 100, height = 50) {
+  return { measured: { width, height }, internals: { positionAbsolute: { x, y } } } as never;
+}
+
+describe('getEdgeParams', () => {
+  it('returns finite endpoints between two nodes', () => {
+    const { sx, sy, tx, ty } = getEdgeParams(fakeNode(0, 0), fakeNode(300, 200));
+    for (const v of [sx, sy, tx, ty]) expect(Number.isFinite(v)).toBe(true);
+  });
+
+  it('source endpoint exits toward the target', () => {
+    // a at origin (center 50,25), b directly to the right
+    const { sx } = getEdgeParams(fakeNode(0, 0, 100, 50), fakeNode(400, 0, 100, 50));
+    expect(sx).toBeGreaterThan(50);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npm test`
+Expected: FAIL — `Cannot find module './floatingEdge'`.
+
+- [ ] **Step 3: Write `floatingEdge.ts`**
+
+```ts
+// src/canvas/floatingEdge.ts
+import type { InternalNode, Node } from '@xyflow/react';
+
+// Border-intersection point on `node` of the line toward `target`'s centre.
+// Adapted verbatim from the official React Flow v12 floating-edges example.
+function getNodeIntersection(node: InternalNode<Node>, target: InternalNode<Node>) {
+  const w = (node.measured.width ?? 0) / 2;
+  const h = (node.measured.height ?? 0) / 2;
+  const x2 = node.internals.positionAbsolute.x + w;
+  const y2 = node.internals.positionAbsolute.y + h;
+  const x1 = target.internals.positionAbsolute.x + (target.measured.width ?? 0) / 2;
+  const y1 = target.internals.positionAbsolute.y + (target.measured.height ?? 0) / 2;
+
+  const xx1 = (x1 - x2) / (2 * w) - (y1 - y2) / (2 * h);
+  const yy1 = (x1 - x2) / (2 * w) + (y1 - y2) / (2 * h);
+  const a = 1 / (Math.abs(xx1) + Math.abs(yy1));
+  const xx3 = a * xx1;
+  const yy3 = a * yy1;
+  return { x: w * (xx3 + yy3) + x2, y: h * (-xx3 + yy3) + y2 };
+}
+
+export interface EdgeEndpoints { sx: number; sy: number; tx: number; ty: number; }
+
+export function getEdgeParams(source: InternalNode<Node>, target: InternalNode<Node>): EdgeEndpoints {
+  const s = getNodeIntersection(source, target);
+  const t = getNodeIntersection(target, source);
+  return { sx: s.x, sy: s.y, tx: t.x, ty: t.y };
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npm test`
+Expected: PASS. (Type-only imports from `@xyflow/react` are erased, so this test does not load React Flow's runtime.)
+
+- [ ] **Step 5: Write the `FloatingEdge` component**
+
+```tsx
+// src/canvas/FloatingEdge.tsx
+import { BaseEdge, getStraightPath, useInternalNode, type EdgeProps } from '@xyflow/react';
+import { getEdgeParams } from './floatingEdge';
+
+export function FloatingEdge({ id, source, target, markerEnd, style }: EdgeProps) {
+  const sourceNode = useInternalNode(source);
+  const targetNode = useInternalNode(target);
+  // Guard: nodes not mounted yet, or not measured on first paint (avoids NaN paths).
+  if (!sourceNode || !targetNode) return null;
+  if (!sourceNode.measured.width || !targetNode.measured.width) return null;
+
+  const { sx, sy, tx, ty } = getEdgeParams(sourceNode, targetNode);
+  const [path] = getStraightPath({ sourceX: sx, sourceY: sy, targetX: tx, targetY: ty });
+  return <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />;
+}
+```
+
+- [ ] **Step 6: Typecheck**
+
+Run: `npx tsc --noEmit`
+Expected: no errors.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/canvas/floatingEdge.ts src/canvas/floatingEdge.test.ts src/canvas/FloatingEdge.tsx
+git commit -m "feat(canvas): floating straight edge for diagonal fishbone bones"
+```
+
+---
+
+## Task 9: Custom node component
 
 **Files:**
 - Create: `src/canvas/KnowflowNode.tsx`
 - Create: `src/canvas/KnowflowNode.css`
 
-No unit test (visual React component; verified in the harness in Task 10). Renders the right shape and colors from the style table and exposes four handles (`t` target, `b` source, `l` target, `r` source). Diamond uses the rotate-square / counter-rotate-label technique so text stays upright.
+No unit test (visual React component; verified in the harness in Task 11). Renders the right shape and colors from the style table and exposes four handles (`t` target, `b` source, `l` target, `r` source). The handles double as mount points for the floating fishbone edges (custom nodes need at least one handle for an edge to mount; these are visually hidden via CSS `opacity:0`, never `display:none`). Diamond uses the rotate-square / counter-rotate-label technique so text stays upright.
 
 - [ ] **Step 1: Write the component**
 
@@ -865,7 +983,7 @@ git commit -m "feat(canvas): custom node component (rect/diamond/pill)"
 
 ---
 
-## Task 9: DiagramCanvas component
+## Task 10: DiagramCanvas component
 
 **Files:**
 - Create: `src/canvas/DiagramCanvas.tsx`
@@ -886,9 +1004,11 @@ import type { KnowflowDoc } from '../core/types';
 import { layoutDoc } from '../layout';
 import { toReactFlow, type KnowflowNodeData } from './adapter';
 import { KnowflowNode } from './KnowflowNode';
+import { FloatingEdge } from './FloatingEdge';
 
 // Must be defined outside the component (React Flow requirement).
 const nodeTypes = { knowflow: KnowflowNode };
+const edgeTypes = { floating: FloatingEdge };
 
 interface Props {
   doc: KnowflowDoc;
@@ -912,6 +1032,7 @@ function Inner({ doc, onSelect }: Props) {
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={true}
@@ -948,7 +1069,7 @@ git commit -m "feat(canvas): read-only DiagramCanvas wrapper"
 
 ---
 
-## Task 10: Sample documents + dev harness
+## Task 11: Sample documents + dev harness
 
 **Files:**
 - Create: `src/canvas/samples.ts`
@@ -1100,7 +1221,7 @@ Then open the printed local URL in a browser and confirm ALL of these by hand:
 - Flowchart: steps (blue rects), decisions (amber diamonds with upright text), outcomes (green pills), arrows with "Yes"/"No" labels, laid out top-to-bottom without overlap.
 - Decision Tree: question diamonds branch to outcomes with answer labels.
 - Step List: vertical sequence of numbered-feeling steps, with the warning and note visibly distinct.
-- Fishbone: spine on the right, categories alternating above/below, causes branching off categories.
+- Fishbone: spine (effect) on the right, categories alternating above/below, and bones rendering as **diagonal/slanted** lines (category→spine and cause→category), not horizontal. Confirm the slant reads as a fishbone; if it looks too much like rays converging on the effect box, note it — the next iteration adds spine joints.
 - Switching presets re-renders and the view re-fits.
 - No console errors; React Flow attribution hidden; dotted background visible.
 
@@ -1120,7 +1241,7 @@ git commit -m "feat(canvas): sample documents and preset-switcher dev harness"
 
 ---
 
-## Task 11: Clean up unused scaffold assets
+## Task 12: Clean up unused scaffold assets
 
 **Files:**
 - Delete: `src/assets/react.svg`, `src/assets/hero.png`, `src/assets/vite.svg` (Vite defaults, now unused)
@@ -1168,14 +1289,15 @@ git commit -m "chore: remove orphaned Vite scaffold assets; minimal base CSS"
 ## Self-Review (completed by plan author)
 
 **Spec coverage (Plan 2 = canvas/rendering portion of Slice 1):**
-- Render all four presets — Tasks 3–6 (layout) + 7 (adapter) + 8–9 (components) + 10 (harness proves all four). ✓
-- Per-preset auto-layout — Task 3 (Dagre flowchart/tree), Task 4 (step-list), Task 5 (fishbone), Task 6 (dispatcher). ✓
-- React Flow integration with verified v12 API — Tasks 8–9 (nodeTypes outside component, CSS import, read-only props, fitView in effect, ArrowClosed marker). ✓
-- Visual language consistent with the approved mockup — Task 2 style table + Task 8 CSS. ✓
+- Render all four presets — Tasks 3–6 (layout) + 7 (adapter) + 8 (floating edge) + 9–10 (node + canvas) + 11 (harness proves all four). ✓
+- Per-preset auto-layout — Task 3 (Dagre flowchart/tree), Task 4 (step-list), Task 5 (fishbone, diagonal), Task 6 (dispatcher). ✓
+- Fishbone diagonal bones (user-requested) — Task 5 (diagonal positioning) + Task 7 (edges typed `floating`) + Task 8 (floating straight edge via verified `getEdgeParams`). ✓
+- React Flow integration with verified v12 API — Tasks 8 (custom floating edge, `getStraightPath`, `useInternalNode`), 9–10 (nodeTypes/edgeTypes outside component, CSS import, read-only props, fitView in effect, ArrowClosed marker). ✓
+- Visual language consistent with the approved mockup — Task 2 style table + Task 9 CSS. ✓
 - Deferred correctly to later plans: editing (palette/inspector wired to operations) → Plan 3; accessible narrative view + export → Plan 4.
 
-**Placeholder scan:** No TBD/TODO. Pure-logic tasks (1–7) are full TDD with real assertions. Component tasks (8–10) have complete code and an explicit manual verification checklist (correct for a visual canvas where unit tests add little value). ✓
+**Placeholder scan:** No TBD/TODO. Pure-logic tasks (1–8 incl. `getEdgeParams`) are full TDD with real assertions. Visual component tasks (9–11) have complete code and an explicit manual verification checklist (correct for a visual canvas where unit tests add little value). ✓
 
-**Type consistency:** `Positions` defined in `graphLayout.ts` (Task 3), re-exported from `layout/index.ts` (Task 6), imported by `adapter.ts` (Task 7). `KnowflowNodeData` defined in `adapter.ts` (Task 7), consumed by `KnowflowNode.tsx` (Task 8) and `DiagramCanvas.tsx` (Task 9). Node `type: 'knowflow'` set in adapter (Task 7) matches `nodeTypes = { knowflow: KnowflowNode }` (Task 9). Handle ids `t/b/l/r` defined in Task 8 match `sourceHandle`/`targetHandle` values in the adapter (Task 7). `sizeForShape`/`styleFor` signatures consistent across Tasks 1–8. ✓
+**Type consistency:** `Positions` defined in `graphLayout.ts` (Task 3), re-exported from `layout/index.ts` (Task 6), imported by `adapter.ts` (Task 7). `KnowflowNodeData` defined in `adapter.ts` (Task 7), consumed by `KnowflowNode.tsx` (Task 9) and `DiagramCanvas.tsx` (Task 10). `getEdgeParams`/`EdgeEndpoints` defined in `floatingEdge.ts` (Task 8), used by `FloatingEdge.tsx` (Task 8) and registered as `edgeTypes = { floating: FloatingEdge }` in `DiagramCanvas.tsx` (Task 10) — matching `type: 'floating'` set by the adapter (Task 7). Node `type: 'knowflow'` (adapter, Task 7) matches `nodeTypes = { knowflow: KnowflowNode }` (Task 10). Handle ids `t/b/l/r` defined in Task 9 match `sourceHandle`/`targetHandle` values for graph/sequence edges in the adapter (Task 7); floating edges set no handles (geometry computed). `sizeForShape`/`styleFor` signatures consistent across Tasks 1–9. ✓
 
-**Known limitation flagged in-plan:** fishbone ribs render as straight edges, not true angled spine ribs (functional, not yet pixel-faithful to the mockup) — deferred polish, called out in Task 5/design decisions.
+**Known limitation flagged in-plan:** fishbone bones render as diagonal floating edges that converge on the effect box — genuinely slanted (the user's request), but not yet a true horizontal spine with bones meeting it at distinct joints. That fuller Ishikawa geometry (synthetic spine-joint nodes) and possible drag-with-snap are explicit next-iteration items, called out in the design decisions and Task 11 verification.

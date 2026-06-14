@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>knowflow Slice 1 — Plan 2: Canvas & Rendering</title>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --paper:#F6F2EA; --ink:#29281F; --ink2:#5C564B; --muted:#978D7C;
+    --line:#E4DBCD; --accent:#0F766E; --code-bg:#FBF8F2; }
+  *{box-sizing:border-box}
+  body{ margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Hanken Grotesk",ui-sans-serif,system-ui,sans-serif; line-height:1.6; }
+  .wrap{ max-width:880px; margin:0 auto; padding:48px 28px 120px; }
+  h1,h2,h3,h4{ line-height:1.25; }
+  h1{ font-size:30px; border-bottom:2px solid var(--accent); padding-bottom:.35em; }
+  h2{ font-size:22px; margin-top:2em; border-bottom:1px solid var(--line); padding-bottom:.3em; }
+  h3{ font-size:17px; margin-top:1.6em; color:#1e3a36; }
+  h4{ font-size:14.5px; color:var(--ink2); }
+  a{ color:var(--accent); }
+  p,li{ font-size:15px; }
+  code{ font-family:"JetBrains Mono",monospace; font-size:13px; background:var(--code-bg);
+    border:1px solid var(--line); border-radius:5px; padding:1px 5px; }
+  pre{ background:var(--code-bg); border:1px solid var(--line); border-radius:12px;
+    padding:16px 18px; overflow-x:auto; }
+  pre code{ border:0; padding:0; background:none; font-size:12.5px; line-height:1.55; }
+  blockquote{ border-left:3px solid var(--accent); margin:1em 0; padding:.4em 1em;
+    background:#EAF1EF; border-radius:0 8px 8px 0; color:var(--ink2); }
+  table{ border-collapse:collapse; width:100%; margin:1em 0; font-size:14px; }
+  th,td{ border:1px solid var(--line); padding:7px 10px; text-align:left; vertical-align:top; }
+  th{ background:#F0E9DC; }
+  hr{ border:0; border-top:1px solid var(--line); margin:2.5em 0; }
+  input[type=checkbox]{ margin-right:8px; }
+  li{ margin:.2em 0; }
+</style>
+</head>
+<body><div class="wrap">
+<h1>knowflow Slice 1 — Plan 2: Canvas &amp; Rendering Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Render any knowflow document (from the Plan 1 core) as a polished, read-only diagram for all four presets, using a pure layout engine plus React Flow.</p>
+<p><strong>Architecture:</strong> A pure <code>layout</code> layer computes <code>{ blockId → {x,y} }</code> per preset (Dagre for flowchart/decision-tree; simple math for step-list and fishbone). A pure <code>adapter</code> converts a <code>KnowflowDoc</code> + positions into React Flow <code>nodes</code>/<code>edges</code> (synthesizing rib edges for fishbone and sequence edges for step-list). A single custom node component renders every block type by its visual shape. A <code>DiagramCanvas</code> React component wires it into a read-only <code>&lt;ReactFlow&gt;</code>. A dev harness (<code>App.tsx</code>) lets you pick a preset and see a seeded sample rendered.</p>
+<p><strong>Tech Stack:</strong> React 19 + Vite + TypeScript, <code>@xyflow/react</code> v12, <code>@dagrejs/dagre</code>, Vitest. Builds on <code>src/core/</code> from Plan 1 (Plan: <code>docs/plans/2026-06-12-knowflow-slice1-foundation.md</code>).</p>
+<p><strong>Verified library facts (from official docs, 2026-06-13):</strong></p>
+<ul>
+<li>Package <code>@xyflow/react</code> (v12.11.0); <strong>must</strong> <code>import &#39;@xyflow/react/dist/style.css&#39;</code>; React 18/19 both satisfy peers.</li>
+<li><code>nodeTypes</code>/<code>edgeTypes</code> must be defined <strong>outside</strong> the component (or <code>useMemo</code>) or React Flow warns and re-creates them.</li>
+<li>Every node needs an explicit <code>position: {x,y}</code>. Dagre <code>g.node(id)</code> returns the node <strong>center</strong>; React Flow positions by <strong>top-left</strong>, so subtract half width/height.</li>
+<li>Arrowheads: <code>markerEnd: { type: MarkerType.ArrowClosed }</code> imported from <code>@xyflow/react</code>.</li>
+<li>Read-only config: <code>nodesDraggable={false} nodesConnectable={false} elementsSelectable={true}</code>; selection via <code>onSelectionChange</code>.</li>
+<li><code>fitView</code> comes from <code>useReactFlow()</code> and must run inside <code>&lt;ReactFlowProvider&gt;</code>; call it in an effect after positions change (not the same tick as <code>setNodes</code>).</li>
+</ul>
+<p><strong>This is Plan 2 of 4 for Slice 1.</strong> Plan 1 = document core (done). Plan 3 = editing UI (palette + inspector wired to operations + autosave). Plan 4 = accessible narrative view + PNG/PDF/JSON export.</p>
+<hr>
+<h2>Design decisions locked for this plan</h2>
+<ul>
+<li><strong>All four presets render in React Flow</strong> (one canvas, one selection model — keeps Plan 3&#39;s editing uniform). Fishbone is modeled in the core via <code>categoryId</code> attachment with an empty <code>connections</code> array; for <em>rendering only</em>, the adapter synthesizes straight rib edges (cause→category, category→spine). The true angled-rib aesthetic is deferred polish, noted in code.</li>
+<li><strong>Layout is pure and separate from React.</strong> <code>layoutDoc(doc)</code> returns positions; the canvas just consumes them. This keeps layout unit-testable with zero DOM.</li>
+<li><strong>One node component, four shapes.</strong> <code>KnowflowNode</code> switches shape (rect / diamond / pill) by block type using a shared style table, and exposes four handles (<code>t</code> target, <code>b</code> source, <code>l</code> target, <code>r</code> source) so the adapter can attach edges directionally per preset.</li>
+<li><strong>Read-only this plan.</strong> No editing yet; the canvas renders and allows selection (selection is surfaced but unused until Plan 3).</li>
+<li><strong>Fixed node sizes per shape</strong> (so Dagre layout matches rendered size). Defined once in <code>blockStyles.ts</code> and used by both layout and rendering.</li>
+</ul>
+<h2>File Structure</h2>
+<ul>
+<li><code>src/layout/sizes.ts</code> — fixed node dimensions per visual shape (shared by layout + render).</li>
+<li><code>src/layout/graphLayout.ts</code> — Dagre layout for flowchart + decision-tree.</li>
+<li><code>src/layout/linearLayout.ts</code> — vertical-stack layout for step-list.</li>
+<li><code>src/layout/fishboneLayout.ts</code> — spine + alternating categories + stacked causes.</li>
+<li><code>src/layout/index.ts</code> — <code>layoutDoc(doc)</code> dispatcher by preset; returns <code>Positions</code>.</li>
+<li><code>src/canvas/adapter.ts</code> — <code>toReactFlow(doc, positions)</code> → <code>{ nodes, edges }</code> (pure).</li>
+<li><code>src/canvas/blockStyles.ts</code> — block-type → <code>{ shape, bg, border, ink, size }</code> style table.</li>
+<li><code>src/canvas/KnowflowNode.tsx</code> — custom node component (rect/diamond/pill + 4 handles).</li>
+<li><code>src/canvas/DiagramCanvas.tsx</code> — <code>&lt;ReactFlow&gt;</code> wrapper (read-only, fitView, Background, Controls).</li>
+<li><code>src/canvas/samples.ts</code> — seeded sample docs per preset for the dev harness + tests.</li>
+<li><code>src/App.tsx</code> — replace Vite default with a preset-switcher harness rendering <code>DiagramCanvas</code>.</li>
+<li><code>src/index.css</code> / component CSS — minimal styling consistent with the approved mockup palette.</li>
+</ul>
+<hr>
+<h2>Task 1: Install dependencies and node sizes</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li><p>Modify: <code>package.json</code> (deps)</p>
+</li>
+<li><p>Create: <code>src/layout/sizes.ts</code></p>
+</li>
+<li><p>Test: <code>src/layout/sizes.test.ts</code></p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Install React Flow and Dagre</strong></p>
+</li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-bash">cd /Users/tnt/Projects/knowflow
+npm install @xyflow/react @dagrejs/dagre
+</code></pre>
+<p>Expected: both added to <code>dependencies</code>. (React 19 satisfies peers; no <code>--legacy-peer-deps</code> needed.)</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Write the failing test</strong></li>
+</ul>
+<pre><code class="language-ts">// src/layout/sizes.test.ts
+import { describe, it, expect } from &#39;vitest&#39;;
+import { sizeForShape, type Shape } from &#39;./sizes&#39;;
+
+describe(&#39;node sizes&#39;, () =&gt; {
+  it(&#39;returns positive width/height for every shape&#39;, () =&gt; {
+    const shapes: Shape[] = [&#39;rect&#39;, &#39;diamond&#39;, &#39;pill&#39;];
+    for (const s of shapes) {
+      const { width, height } = sizeForShape(s);
+      expect(width).toBeGreaterThan(0);
+      expect(height).toBeGreaterThan(0);
+    }
+  });
+
+  it(&#39;makes diamonds square (equal width and height)&#39;, () =&gt; {
+    const d = sizeForShape(&#39;diamond&#39;);
+    expect(d.width).toBe(d.height);
+  });
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>npm test</code>
+Expected: FAIL — <code>Cannot find module &#39;./sizes&#39;</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Write the implementation</strong></li>
+</ul>
+<pre><code class="language-ts">// src/layout/sizes.ts
+export type Shape = &#39;rect&#39; | &#39;diamond&#39; | &#39;pill&#39;;
+
+export interface Size { width: number; height: number; }
+
+const SIZES: Record&lt;Shape, Size&gt; = {
+  rect: { width: 180, height: 56 },
+  diamond: { width: 130, height: 130 },
+  pill: { width: 170, height: 52 },
+};
+
+export function sizeForShape(shape: Shape): Size {
+  return SIZES[shape];
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>npm test</code>
+Expected: PASS.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add package.json package-lock.json src/layout/sizes.ts src/layout/sizes.test.ts
+git commit -m &quot;chore: add React Flow + Dagre; define node sizes&quot;
+</code></pre>
+<hr>
+<h2>Task 2: Block style table</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>src/canvas/blockStyles.ts</code></li>
+<li>Test: <code>src/canvas/blockStyles.test.ts</code></li>
+</ul>
+<p>Maps every <code>BlockType</code> to its visual treatment (shape + colors), reusing the approved mockup palette. Shape drives both layout size and rendering, so this is the single source of visual truth.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<pre><code class="language-ts">// src/canvas/blockStyles.test.ts
+import { describe, it, expect } from &#39;vitest&#39;;
+import { styleFor } from &#39;./blockStyles&#39;;
+import { ALL_BLOCK_TYPES } from &#39;../core/types&#39;;
+
+describe(&#39;block styles&#39;, () =&gt; {
+  it(&#39;has a style for every block type&#39;, () =&gt; {
+    for (const t of ALL_BLOCK_TYPES) {
+      const s = styleFor(t);
+      expect(s.shape).toMatch(/^(rect|diamond|pill)$/);
+      expect(s.bg).toMatch(/^#/);
+    }
+  });
+
+  it(&#39;uses diamond for decisions and questions, pill for outcomes&#39;, () =&gt; {
+    expect(styleFor(&#39;decision&#39;).shape).toBe(&#39;diamond&#39;);
+    expect(styleFor(&#39;question&#39;).shape).toBe(&#39;diamond&#39;);
+    expect(styleFor(&#39;outcome&#39;).shape).toBe(&#39;pill&#39;);
+  });
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>npm test</code>
+Expected: FAIL — <code>Cannot find module &#39;./blockStyles&#39;</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Write the implementation</strong></li>
+</ul>
+<pre><code class="language-ts">// src/canvas/blockStyles.ts
+import type { BlockType } from &#39;../core/types&#39;;
+import type { Shape } from &#39;../layout/sizes&#39;;
+
+export interface BlockStyle {
+  shape: Shape;
+  bg: string;
+  border: string;
+  ink: string;
+}
+
+const STEP: BlockStyle    = { shape: &#39;rect&#39;,    bg: &#39;#E7EDF5&#39;, border: &#39;#9DB4D0&#39;, ink: &#39;#2E435C&#39; };
+const DECISION: BlockStyle = { shape: &#39;diamond&#39;, bg: &#39;#F8EFD6&#39;, border: &#39;#D9B968&#39;, ink: &#39;#6A4E14&#39; };
+const OUTCOME: BlockStyle  = { shape: &#39;pill&#39;,    bg: &#39;#E5F0E7&#39;, border: &#39;#92BC9B&#39;, ink: &#39;#2F5236&#39; };
+const SPINE: BlockStyle    = { shape: &#39;rect&#39;,    bg: &#39;#E4EFEC&#39;, border: &#39;#0F766E&#39;, ink: &#39;#0B5D56&#39; };
+const CATEGORY: BlockStyle = { shape: &#39;rect&#39;,    bg: &#39;#F8EFD6&#39;, border: &#39;#D9B968&#39;, ink: &#39;#6A4E14&#39; };
+const CAUSE: BlockStyle    = { shape: &#39;rect&#39;,    bg: &#39;#FBF8F2&#39;, border: &#39;#DED3C2&#39;, ink: &#39;#5C564B&#39; };
+const NOTE: BlockStyle     = { shape: &#39;rect&#39;,    bg: &#39;#EEF2F6&#39;, border: &#39;#C3BAAC&#39;, ink: &#39;#5C564B&#39; };
+const WARNING: BlockStyle  = { shape: &#39;rect&#39;,    bg: &#39;#F6E7E2&#39;, border: &#39;#D9A18F&#39;, ink: &#39;#8A4632&#39; };
+
+const TABLE: Record&lt;BlockType, BlockStyle&gt; = {
+  step: STEP,
+  decision: DECISION,
+  outcome: OUTCOME,
+  question: DECISION,
+  spine: SPINE,
+  category: CATEGORY,
+  cause: CAUSE,
+  note: NOTE,
+  warning: WARNING,
+};
+
+export function styleFor(type: BlockType): BlockStyle {
+  return TABLE[type];
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>npm test</code>
+Expected: PASS.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/canvas/blockStyles.ts src/canvas/blockStyles.test.ts
+git commit -m &quot;feat(canvas): block-type visual style table&quot;
+</code></pre>
+<hr>
+<h2>Task 3: Graph layout (flowchart + decision-tree) via Dagre</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>src/layout/graphLayout.ts</code></li>
+<li>Test: <code>src/layout/graphLayout.test.ts</code></li>
+</ul>
+<p>Lays out node-and-edge presets top-to-bottom with Dagre. Node sizes come from the block style + size tables so the layout matches what gets rendered. Converts Dagre&#39;s center coordinates to React Flow&#39;s top-left.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<pre><code class="language-ts">// src/layout/graphLayout.test.ts
+import { describe, it, expect } from &#39;vitest&#39;;
+import { graphLayout } from &#39;./graphLayout&#39;;
+import type { KnowflowDoc } from &#39;../core/types&#39;;
+
+function doc(partial: Partial&lt;KnowflowDoc&gt;): KnowflowDoc {
+  return {
+    id: &#39;d&#39;, title: &#39;T&#39;, preset: &#39;flowchart&#39;, blocks: [], connections: [],
+    meta: { createdAt: &#39;x&#39;, updatedAt: &#39;x&#39;, status: &#39;draft&#39;, version: 1 },
+    ...partial,
+  };
+}
+
+describe(&#39;graphLayout&#39;, () =&gt; {
+  it(&#39;returns a position for every block&#39;, () =&gt; {
+    const d = doc({
+      blocks: [
+        { id: &#39;a&#39;, type: &#39;step&#39;, text: &#39;Start&#39; },
+        { id: &#39;b&#39;, type: &#39;decision&#39;, text: &#39;OK?&#39; },
+        { id: &#39;c&#39;, type: &#39;outcome&#39;, text: &#39;Done&#39; },
+      ],
+      connections: [
+        { id: &#39;e1&#39;, from: &#39;a&#39;, to: &#39;b&#39; },
+        { id: &#39;e2&#39;, from: &#39;b&#39;, to: &#39;c&#39;, label: &#39;yes&#39; },
+      ],
+    });
+    const pos = graphLayout(d);
+    expect(Object.keys(pos).sort()).toEqual([&#39;a&#39;, &#39;b&#39;, &#39;c&#39;]);
+    for (const id of [&#39;a&#39;, &#39;b&#39;, &#39;c&#39;]) {
+      expect(typeof pos[id].x).toBe(&#39;number&#39;);
+      expect(typeof pos[id].y).toBe(&#39;number&#39;);
+    }
+  });
+
+  it(&#39;places connected nodes top-to-bottom (child below parent)&#39;, () =&gt; {
+    const d = doc({
+      blocks: [
+        { id: &#39;a&#39;, type: &#39;step&#39;, text: &#39;Start&#39; },
+        { id: &#39;b&#39;, type: &#39;outcome&#39;, text: &#39;Done&#39; },
+      ],
+      connections: [{ id: &#39;e1&#39;, from: &#39;a&#39;, to: &#39;b&#39; }],
+    });
+    const pos = graphLayout(d);
+    expect(pos[&#39;b&#39;].y).toBeGreaterThan(pos[&#39;a&#39;].y);
+  });
+
+  it(&#39;handles an empty document without throwing&#39;, () =&gt; {
+    expect(graphLayout(doc({}))).toEqual({});
+  });
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>npm test</code>
+Expected: FAIL — <code>Cannot find module &#39;./graphLayout&#39;</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Write the implementation</strong></li>
+</ul>
+<pre><code class="language-ts">// src/layout/graphLayout.ts
+import dagre from &#39;@dagrejs/dagre&#39;;
+import type { KnowflowDoc } from &#39;../core/types&#39;;
+import { sizeForShape } from &#39;./sizes&#39;;
+import { styleFor } from &#39;../canvas/blockStyles&#39;;
+
+export interface Positions {
+  [blockId: string]: { x: number; y: number };
+}
+
+export function graphLayout(doc: KnowflowDoc, rankdir: &#39;TB&#39; | &#39;LR&#39; = &#39;TB&#39;): Positions {
+  if (doc.blocks.length === 0) return {};
+
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir, nodesep: 60, ranksep: 70 });
+  g.setDefaultEdgeLabel(() =&gt; ({}));
+
+  for (const b of doc.blocks) {
+    const { width, height } = sizeForShape(styleFor(b.type).shape);
+    g.setNode(b.id, { width, height });
+  }
+  for (const c of doc.connections) {
+    if (g.hasNode(c.from) &amp;&amp; g.hasNode(c.to)) g.setEdge(c.from, c.to);
+  }
+
+  dagre.layout(g);
+
+  const positions: Positions = {};
+  for (const b of doc.blocks) {
+    const n = g.node(b.id);
+    // Dagre reports node centers; React Flow positions by top-left.
+    positions[b.id] = { x: n.x - n.width / 2, y: n.y - n.height / 2 };
+  }
+  return positions;
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>npm test</code>
+Expected: PASS.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/layout/graphLayout.ts src/layout/graphLayout.test.ts
+git commit -m &quot;feat(layout): Dagre graph layout for flowchart and decision tree&quot;
+</code></pre>
+<hr>
+<h2>Task 4: Linear layout (step-list)</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>src/layout/linearLayout.ts</code></li>
+<li>Test: <code>src/layout/linearLayout.test.ts</code></li>
+</ul>
+<p>Stacks blocks vertically in document order with even spacing.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<pre><code class="language-ts">// src/layout/linearLayout.test.ts
+import { describe, it, expect } from &#39;vitest&#39;;
+import { linearLayout } from &#39;./linearLayout&#39;;
+import type { KnowflowDoc } from &#39;../core/types&#39;;
+
+function doc(partial: Partial&lt;KnowflowDoc&gt;): KnowflowDoc {
+  return {
+    id: &#39;d&#39;, title: &#39;T&#39;, preset: &#39;stepList&#39;, blocks: [], connections: [],
+    meta: { createdAt: &#39;x&#39;, updatedAt: &#39;x&#39;, status: &#39;draft&#39;, version: 1 },
+    ...partial,
+  };
+}
+
+describe(&#39;linearLayout&#39;, () =&gt; {
+  it(&#39;stacks blocks top-to-bottom in order, same x&#39;, () =&gt; {
+    const d = doc({
+      blocks: [
+        { id: &#39;1&#39;, type: &#39;step&#39;, text: &#39;A&#39; },
+        { id: &#39;2&#39;, type: &#39;step&#39;, text: &#39;B&#39; },
+        { id: &#39;3&#39;, type: &#39;warning&#39;, text: &#39;C&#39; },
+      ],
+    });
+    const pos = linearLayout(d);
+    expect(pos[&#39;1&#39;].x).toBe(pos[&#39;2&#39;].x);
+    expect(pos[&#39;2&#39;].y).toBeGreaterThan(pos[&#39;1&#39;].y);
+    expect(pos[&#39;3&#39;].y).toBeGreaterThan(pos[&#39;2&#39;].y);
+  });
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>npm test</code>
+Expected: FAIL — <code>Cannot find module &#39;./linearLayout&#39;</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Write the implementation</strong></li>
+</ul>
+<pre><code class="language-ts">// src/layout/linearLayout.ts
+import type { KnowflowDoc } from &#39;../core/types&#39;;
+import { sizeForShape } from &#39;./sizes&#39;;
+import { styleFor } from &#39;../canvas/blockStyles&#39;;
+import type { Positions } from &#39;./graphLayout&#39;;
+
+const GAP = 28;
+
+export function linearLayout(doc: KnowflowDoc): Positions {
+  const positions: Positions = {};
+  let y = 0;
+  for (const b of doc.blocks) {
+    const { height } = sizeForShape(styleFor(b.type).shape);
+    positions[b.id] = { x: 0, y };
+    y += height + GAP;
+  }
+  return positions;
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>npm test</code>
+Expected: PASS.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/layout/linearLayout.ts src/layout/linearLayout.test.ts
+git commit -m &quot;feat(layout): linear layout for step lists&quot;
+</code></pre>
+<hr>
+<h2>Task 5: Fishbone layout</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>src/layout/fishboneLayout.ts</code></li>
+<li>Test: <code>src/layout/fishboneLayout.test.ts</code></li>
+</ul>
+<p>Spine (effect) sits at the right. Categories alternate above and below a horizontal spine line, spread left-to-right. Each category&#39;s causes stack outward (above categories go up, below go down).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<pre><code class="language-ts">// src/layout/fishboneLayout.test.ts
+import { describe, it, expect } from &#39;vitest&#39;;
+import { fishboneLayout } from &#39;./fishboneLayout&#39;;
+import type { KnowflowDoc } from &#39;../core/types&#39;;
+
+function doc(partial: Partial&lt;KnowflowDoc&gt;): KnowflowDoc {
+  return {
+    id: &#39;d&#39;, title: &#39;T&#39;, preset: &#39;fishbone&#39;, blocks: [], connections: [],
+    meta: { createdAt: &#39;x&#39;, updatedAt: &#39;x&#39;, status: &#39;draft&#39;, version: 1 },
+    ...partial,
+  };
+}
+
+describe(&#39;fishboneLayout&#39;, () =&gt; {
+  it(&#39;positions spine, categories, and causes&#39;, () =&gt; {
+    const d = doc({
+      blocks: [
+        { id: &#39;s&#39;, type: &#39;spine&#39;, text: &#39;Effect&#39; },
+        { id: &#39;c1&#39;, type: &#39;category&#39;, text: &#39;Students&#39; },
+        { id: &#39;ca1&#39;, type: &#39;cause&#39;, text: &#39;Not enrolled&#39;, categoryId: &#39;c1&#39; },
+        { id: &#39;c2&#39;, type: &#39;category&#39;, text: &#39;Staff&#39; },
+      ],
+    });
+    const pos = fishboneLayout(d);
+    expect(Object.keys(pos).sort()).toEqual([&#39;c1&#39;, &#39;c2&#39;, &#39;ca1&#39;, &#39;s&#39;]);
+  });
+
+  it(&#39;places the spine to the right of the first category&#39;, () =&gt; {
+    const d = doc({
+      blocks: [
+        { id: &#39;s&#39;, type: &#39;spine&#39;, text: &#39;Effect&#39; },
+        { id: &#39;c1&#39;, type: &#39;category&#39;, text: &#39;Students&#39; },
+      ],
+    });
+    const pos = fishboneLayout(d);
+    expect(pos[&#39;s&#39;].x).toBeGreaterThan(pos[&#39;c1&#39;].x);
+  });
+
+  it(&#39;alternates categories above and below the spine&#39;, () =&gt; {
+    const d = doc({
+      blocks: [
+        { id: &#39;s&#39;, type: &#39;spine&#39;, text: &#39;E&#39; },
+        { id: &#39;c1&#39;, type: &#39;category&#39;, text: &#39;A&#39; },
+        { id: &#39;c2&#39;, type: &#39;category&#39;, text: &#39;B&#39; },
+      ],
+    });
+    const pos = fishboneLayout(d);
+    // first category above (smaller y), second below (larger y)
+    expect(pos[&#39;c1&#39;].y).toBeLessThan(pos[&#39;c2&#39;].y);
+  });
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>npm test</code>
+Expected: FAIL — <code>Cannot find module &#39;./fishboneLayout&#39;</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Write the implementation</strong></li>
+</ul>
+<pre><code class="language-ts">// src/layout/fishboneLayout.ts
+import type { KnowflowDoc, Block } from &#39;../core/types&#39;;
+import type { Positions } from &#39;./graphLayout&#39;;
+
+const COL = 240;      // horizontal gap between categories
+const SPINE_Y = 0;    // spine sits on the centre line
+const CAT_OFFSET = 150; // category distance above/below the spine
+const CAUSE_GAP = 70;   // gap between stacked causes
+
+export function fishboneLayout(doc: KnowflowDoc): Positions {
+  const positions: Positions = {};
+  const categories = doc.blocks.filter(b =&gt; b.type === &#39;category&#39;);
+
+  categories.forEach((cat, i) =&gt; {
+    const x = i * COL;
+    const above = i % 2 === 0;
+    const catY = above ? SPINE_Y - CAT_OFFSET : SPINE_Y + CAT_OFFSET;
+    positions[cat.id] = { x, y: catY };
+
+    const causes = doc.blocks.filter((b: Block) =&gt; b.type === &#39;cause&#39; &amp;&amp; b.categoryId === cat.id);
+    causes.forEach((cause, j) =&gt; {
+      const step = (j + 1) * CAUSE_GAP;
+      positions[cause.id] = { x: x - 40, y: above ? catY - step : catY + step };
+    });
+  });
+
+  const spine = doc.blocks.find(b =&gt; b.type === &#39;spine&#39;);
+  if (spine) {
+    positions[spine.id] = { x: Math.max(categories.length, 1) * COL, y: SPINE_Y };
+  }
+  return positions;
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>npm test</code>
+Expected: PASS.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/layout/fishboneLayout.ts src/layout/fishboneLayout.test.ts
+git commit -m &quot;feat(layout): fishbone layout (spine + alternating categories)&quot;
+</code></pre>
+<hr>
+<h2>Task 6: Layout dispatcher</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li><p>Create: <code>src/layout/index.ts</code></p>
+</li>
+<li><p>Test: <code>src/layout/index.test.ts</code></p>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></p>
+</li>
+</ul>
+<pre><code class="language-ts">// src/layout/index.test.ts
+import { describe, it, expect } from &#39;vitest&#39;;
+import { layoutDoc } from &#39;./index&#39;;
+import { createDoc } from &#39;../core/createDoc&#39;;
+import { addBlock } from &#39;../core/operations&#39;;
+import type { Clock } from &#39;../core/ids&#39;;
+
+const clock: Clock = { newId: (() =&gt; { let n = 0; return () =&gt; `id${++n}`; })(), nowIso: () =&gt; &#39;x&#39; };
+
+describe(&#39;layoutDoc&#39;, () =&gt; {
+  it(&#39;returns positions for each preset without throwing&#39;, () =&gt; {
+    for (const preset of [&#39;flowchart&#39;, &#39;decisionTree&#39;, &#39;stepList&#39;, &#39;fishbone&#39;] as const) {
+      let d = createDoc(preset, &#39;T&#39;, clock);
+      d = addBlock(d, &#39;A&#39;, undefined, clock).doc;
+      const pos = layoutDoc(d);
+      for (const b of d.blocks) {
+        expect(pos[b.id]).toBeDefined();
+      }
+    }
+  });
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>npm test</code>
+Expected: FAIL — <code>Cannot find module &#39;./index&#39;</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Write the implementation</strong></li>
+</ul>
+<pre><code class="language-ts">// src/layout/index.ts
+import type { KnowflowDoc } from &#39;../core/types&#39;;
+import { graphLayout, type Positions } from &#39;./graphLayout&#39;;
+import { linearLayout } from &#39;./linearLayout&#39;;
+import { fishboneLayout } from &#39;./fishboneLayout&#39;;
+
+export type { Positions } from &#39;./graphLayout&#39;;
+
+export function layoutDoc(doc: KnowflowDoc): Positions {
+  switch (doc.preset) {
+    case &#39;flowchart&#39;:
+    case &#39;decisionTree&#39;:
+      return graphLayout(doc, &#39;TB&#39;);
+    case &#39;stepList&#39;:
+      return linearLayout(doc);
+    case &#39;fishbone&#39;:
+      return fishboneLayout(doc);
+  }
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>npm test</code>
+Expected: PASS.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/layout/index.ts src/layout/index.test.ts
+git commit -m &quot;feat(layout): preset layout dispatcher&quot;
+</code></pre>
+<hr>
+<h2>Task 7: React Flow adapter</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>src/canvas/adapter.ts</code></li>
+<li>Test: <code>src/canvas/adapter.test.ts</code></li>
+</ul>
+<p>Converts a document + positions into React Flow <code>nodes</code>/<code>edges</code>. For flowchart/decision-tree, real connections become edges (bottom→top handles). For step-list, consecutive blocks get synthesized sequence edges. For fishbone, synthesized straight rib edges (cause→category, category→spine) using right→left handles. Every node carries <code>data</code> the custom component needs.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<pre><code class="language-ts">// src/canvas/adapter.test.ts
+import { describe, it, expect } from &#39;vitest&#39;;
+import { toReactFlow } from &#39;./adapter&#39;;
+import type { KnowflowDoc } from &#39;../core/types&#39;;
+import { layoutDoc } from &#39;../layout&#39;;
+
+function build(partial: Partial&lt;KnowflowDoc&gt;): KnowflowDoc {
+  return {
+    id: &#39;d&#39;, title: &#39;T&#39;, preset: &#39;flowchart&#39;, blocks: [], connections: [],
+    meta: { createdAt: &#39;x&#39;, updatedAt: &#39;x&#39;, status: &#39;draft&#39;, version: 1 },
+    ...partial,
+  };
+}
+
+describe(&#39;toReactFlow adapter&#39;, () =&gt; {
+  it(&#39;maps blocks to nodes with position and data&#39;, () =&gt; {
+    const doc = build({
+      blocks: [{ id: &#39;a&#39;, type: &#39;step&#39;, text: &#39;Start&#39; }],
+    });
+    const { nodes } = toReactFlow(doc, layoutDoc(doc));
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].id).toBe(&#39;a&#39;);
+    expect(nodes[0].type).toBe(&#39;knowflow&#39;);
+    expect(nodes[0].data).toMatchObject({ blockType: &#39;step&#39;, text: &#39;Start&#39; });
+    expect(nodes[0].position).toBeDefined();
+  });
+
+  it(&#39;maps flowchart connections to edges with labels and arrowheads&#39;, () =&gt; {
+    const doc = build({
+      blocks: [
+        { id: &#39;a&#39;, type: &#39;step&#39;, text: &#39;Start&#39; },
+        { id: &#39;b&#39;, type: &#39;outcome&#39;, text: &#39;Done&#39; },
+      ],
+      connections: [{ id: &#39;e1&#39;, from: &#39;a&#39;, to: &#39;b&#39;, label: &#39;yes&#39; }],
+    });
+    const { edges } = toReactFlow(doc, layoutDoc(doc));
+    expect(edges).toHaveLength(1);
+    expect(edges[0]).toMatchObject({ id: &#39;e1&#39;, source: &#39;a&#39;, target: &#39;b&#39;, label: &#39;yes&#39; });
+    expect(edges[0].markerEnd).toBeDefined();
+  });
+
+  it(&#39;synthesizes sequence edges for step lists&#39;, () =&gt; {
+    const doc = build({
+      preset: &#39;stepList&#39;,
+      blocks: [
+        { id: &#39;1&#39;, type: &#39;step&#39;, text: &#39;A&#39; },
+        { id: &#39;2&#39;, type: &#39;step&#39;, text: &#39;B&#39; },
+        { id: &#39;3&#39;, type: &#39;step&#39;, text: &#39;C&#39; },
+      ],
+    });
+    const { edges } = toReactFlow(doc, layoutDoc(doc));
+    expect(edges).toHaveLength(2);
+    expect(edges.map(e =&gt; [e.source, e.target])).toEqual([[&#39;1&#39;, &#39;2&#39;], [&#39;2&#39;, &#39;3&#39;]]);
+  });
+
+  it(&#39;synthesizes rib edges for fishbone (cause-&gt;category, category-&gt;spine)&#39;, () =&gt; {
+    const doc = build({
+      preset: &#39;fishbone&#39;,
+      blocks: [
+        { id: &#39;s&#39;, type: &#39;spine&#39;, text: &#39;E&#39; },
+        { id: &#39;c1&#39;, type: &#39;category&#39;, text: &#39;Students&#39; },
+        { id: &#39;ca1&#39;, type: &#39;cause&#39;, text: &#39;x&#39;, categoryId: &#39;c1&#39; },
+      ],
+    });
+    const { edges } = toReactFlow(doc, layoutDoc(doc));
+    const pairs = edges.map(e =&gt; [e.source, e.target]).sort();
+    expect(pairs).toEqual([[&#39;c1&#39;, &#39;s&#39;], [&#39;ca1&#39;, &#39;c1&#39;]].sort());
+  });
+});
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Run test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>npm test</code>
+Expected: FAIL — <code>Cannot find module &#39;./adapter&#39;</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Write the implementation</strong></li>
+</ul>
+<pre><code class="language-ts">// src/canvas/adapter.ts
+import { MarkerType, type Node, type Edge } from &#39;@xyflow/react&#39;;
+import type { KnowflowDoc, BlockType } from &#39;../core/types&#39;;
+import type { Positions } from &#39;../layout&#39;;
+
+export interface KnowflowNodeData extends Record&lt;string, unknown&gt; {
+  blockType: BlockType;
+  text: string;
+}
+
+const MARKER = { type: MarkerType.ArrowClosed, width: 18, height: 18, color: &#39;#B6AC9B&#39; };
+
+function nodesFor(doc: KnowflowDoc, positions: Positions): Node&lt;KnowflowNodeData&gt;[] {
+  return doc.blocks.map(b =&gt; ({
+    id: b.id,
+    type: &#39;knowflow&#39;,
+    position: positions[b.id] ?? { x: 0, y: 0 },
+    data: { blockType: b.type, text: b.text },
+  }));
+}
+
+function graphEdges(doc: KnowflowDoc): Edge[] {
+  return doc.connections.map(c =&gt; ({
+    id: c.id, source: c.from, target: c.to, label: c.label,
+    type: &#39;smoothstep&#39;, sourceHandle: &#39;b&#39;, targetHandle: &#39;t&#39;, markerEnd: MARKER,
+  }));
+}
+
+function sequenceEdges(doc: KnowflowDoc): Edge[] {
+  const edges: Edge[] = [];
+  for (let i = 0; i &lt; doc.blocks.length - 1; i++) {
+    const from = doc.blocks[i], to = doc.blocks[i + 1];
+    edges.push({
+      id: `seq-${from.id}-${to.id}`, source: from.id, target: to.id,
+      type: &#39;smoothstep&#39;, sourceHandle: &#39;b&#39;, targetHandle: &#39;t&#39;, markerEnd: MARKER,
+    });
+  }
+  return edges;
+}
+
+function ribEdges(doc: KnowflowDoc): Edge[] {
+  const edges: Edge[] = [];
+  const spine = doc.blocks.find(b =&gt; b.type === &#39;spine&#39;);
+  for (const cat of doc.blocks.filter(b =&gt; b.type === &#39;category&#39;)) {
+    if (spine) {
+      edges.push({ id: `rib-${cat.id}-${spine.id}`, source: cat.id, target: spine.id, type: &#39;straight&#39;, sourceHandle: &#39;r&#39;, targetHandle: &#39;l&#39;, markerEnd: MARKER });
+    }
+    for (const cause of doc.blocks.filter(b =&gt; b.type === &#39;cause&#39; &amp;&amp; b.categoryId === cat.id)) {
+      edges.push({ id: `rib-${cause.id}-${cat.id}`, source: cause.id, target: cat.id, type: &#39;straight&#39;, sourceHandle: &#39;r&#39;, targetHandle: &#39;l&#39;, markerEnd: MARKER });
+    }
+  }
+  return edges;
+}
+
+export function toReactFlow(doc: KnowflowDoc, positions: Positions): { nodes: Node&lt;KnowflowNodeData&gt;[]; edges: Edge[] } {
+  const nodes = nodesFor(doc, positions);
+  let edges: Edge[];
+  switch (doc.preset) {
+    case &#39;flowchart&#39;:
+    case &#39;decisionTree&#39;: edges = graphEdges(doc); break;
+    case &#39;stepList&#39;:     edges = sequenceEdges(doc); break;
+    case &#39;fishbone&#39;:     edges = ribEdges(doc); break;
+  }
+  return { nodes, edges };
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>npm test</code>
+Expected: PASS.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/canvas/adapter.ts src/canvas/adapter.test.ts
+git commit -m &quot;feat(canvas): document-to-ReactFlow adapter&quot;
+</code></pre>
+<hr>
+<h2>Task 8: Custom node component</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>src/canvas/KnowflowNode.tsx</code></li>
+<li>Create: <code>src/canvas/KnowflowNode.css</code></li>
+</ul>
+<p>No unit test (visual React component; verified in the harness in Task 10). Renders the right shape and colors from the style table and exposes four handles (<code>t</code> target, <code>b</code> source, <code>l</code> target, <code>r</code> source). Diamond uses the rotate-square / counter-rotate-label technique so text stays upright.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the component</strong></li>
+</ul>
+<pre><code class="language-tsx">// src/canvas/KnowflowNode.tsx
+import { Handle, Position, type NodeProps, type Node } from &#39;@xyflow/react&#39;;
+import type { KnowflowNodeData } from &#39;./adapter&#39;;
+import { styleFor } from &#39;./blockStyles&#39;;
+import { sizeForShape } from &#39;../layout/sizes&#39;;
+import &#39;./KnowflowNode.css&#39;;
+
+type KNode = Node&lt;KnowflowNodeData, &#39;knowflow&#39;&gt;;
+
+export function KnowflowNode({ data, selected }: NodeProps&lt;KNode&gt;) {
+  const style = styleFor(data.blockType);
+  const { width, height } = sizeForShape(style.shape);
+  const cssVars = {
+    &#39;--bg&#39;: style.bg, &#39;--border&#39;: style.border, &#39;--ink&#39;: style.ink,
+    width, height,
+  } as React.CSSProperties;
+
+  return (
+    &lt;div
+      className={`kf-node kf-${style.shape} ${selected ? &#39;kf-selected&#39; : &#39;&#39;}`}
+      style={cssVars}
+    &gt;
+      &lt;Handle id=&quot;t&quot; type=&quot;target&quot; position={Position.Top} /&gt;
+      &lt;Handle id=&quot;l&quot; type=&quot;target&quot; position={Position.Left} /&gt;
+      &lt;div className=&quot;kf-label&quot;&gt;{data.text}&lt;/div&gt;
+      &lt;Handle id=&quot;b&quot; type=&quot;source&quot; position={Position.Bottom} /&gt;
+      &lt;Handle id=&quot;r&quot; type=&quot;source&quot; position={Position.Right} /&gt;
+    &lt;/div&gt;
+  );
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Write the styles</strong></li>
+</ul>
+<pre><code class="language-css">/* src/canvas/KnowflowNode.css */
+.kf-node {
+  box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg); border: 1.5px solid var(--border); color: var(--ink);
+  font-family: &quot;Hanken Grotesk&quot;, ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600; font-size: 13.5px; text-align: center;
+  box-shadow: 0 1px 2px rgba(41,40,31,.06), 0 8px 20px -14px rgba(41,40,31,.25);
+}
+.kf-rect { border-radius: 12px; padding: 10px 14px; }
+.kf-pill { border-radius: 999px; padding: 10px 18px; }
+.kf-diamond { transform: rotate(45deg); border-radius: 14px; }
+.kf-diamond .kf-label { transform: rotate(-45deg); max-width: 120px; }
+.kf-label { line-height: 1.25; overflow-wrap: anywhere; }
+.kf-selected { outline: 3px solid #0F766E; outline-offset: 3px; box-shadow: 0 0 0 6px rgba(15,118,110,.18); }
+/* React Flow handles: keep them subtle for a read-only diagram */
+.kf-node .react-flow__handle { width: 6px; height: 6px; background: #C6BCAB; border: none; opacity: 0; }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Typecheck</strong></li>
+</ul>
+<p>Run: <code>npx tsc --noEmit</code>
+Expected: no errors.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/canvas/KnowflowNode.tsx src/canvas/KnowflowNode.css
+git commit -m &quot;feat(canvas): custom node component (rect/diamond/pill)&quot;
+</code></pre>
+<hr>
+<h2>Task 9: DiagramCanvas component</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>src/canvas/DiagramCanvas.tsx</code></li>
+</ul>
+<p>Wraps <code>&lt;ReactFlow&gt;</code> read-only. Takes a <code>KnowflowDoc</code>, computes layout + adapter internally, registers the node type (defined at module scope), fits the view when the document changes, and reports selection upward via an optional callback (unused until Plan 3, wired now to avoid churn).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write the component</strong></li>
+</ul>
+<pre><code class="language-tsx">// src/canvas/DiagramCanvas.tsx
+import { useEffect, useMemo } from &#39;react&#39;;
+import {
+  ReactFlow, ReactFlowProvider, Background, Controls, useReactFlow,
+  type Node, type Edge,
+} from &#39;@xyflow/react&#39;;
+import &#39;@xyflow/react/dist/style.css&#39;;
+import type { KnowflowDoc } from &#39;../core/types&#39;;
+import { layoutDoc } from &#39;../layout&#39;;
+import { toReactFlow, type KnowflowNodeData } from &#39;./adapter&#39;;
+import { KnowflowNode } from &#39;./KnowflowNode&#39;;
+
+// Must be defined outside the component (React Flow requirement).
+const nodeTypes = { knowflow: KnowflowNode };
+
+interface Props {
+  doc: KnowflowDoc;
+  onSelect?: (blockId: string | null) =&gt; void;
+}
+
+function Inner({ doc, onSelect }: Props) {
+  const { fitView } = useReactFlow();
+  const { nodes, edges } = useMemo&lt;{ nodes: Node&lt;KnowflowNodeData&gt;[]; edges: Edge[] }&gt;(
+    () =&gt; toReactFlow(doc, layoutDoc(doc)),
+    [doc],
+  );
+
+  useEffect(() =&gt; {
+    const t = setTimeout(() =&gt; fitView({ padding: 0.2, duration: 300 }), 0);
+    return () =&gt; clearTimeout(t);
+  }, [doc, fitView]);
+
+  return (
+    &lt;ReactFlow
+      nodes={nodes}
+      edges={edges}
+      nodeTypes={nodeTypes}
+      nodesDraggable={false}
+      nodesConnectable={false}
+      elementsSelectable={true}
+      fitView
+      onSelectionChange={({ nodes }) =&gt; onSelect?.(nodes[0]?.id ?? null)}
+      proOptions={{ hideAttribution: true }}
+    &gt;
+      &lt;Background gap={24} size={1.1} color=&quot;#D4DDE7&quot; /&gt;
+      &lt;Controls showInteractive={false} /&gt;
+    &lt;/ReactFlow&gt;
+  );
+}
+
+export function DiagramCanvas(props: Props) {
+  return (
+    &lt;ReactFlowProvider&gt;
+      &lt;Inner {...props} /&gt;
+    &lt;/ReactFlowProvider&gt;
+  );
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Typecheck</strong></li>
+</ul>
+<p>Run: <code>npx tsc --noEmit</code>
+Expected: no errors. (If <code>proOptions.hideAttribution</code> triggers a license note, leave it — it&#39;s permitted for the free MIT build; remove the prop if it causes a type error.)</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/canvas/DiagramCanvas.tsx
+git commit -m &quot;feat(canvas): read-only DiagramCanvas wrapper&quot;
+</code></pre>
+<hr>
+<h2>Task 10: Sample documents + dev harness</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Create: <code>src/canvas/samples.ts</code></li>
+<li>Modify: <code>src/App.tsx</code> (replace Vite default)</li>
+<li>Modify: <code>src/App.css</code> (replace with harness styling)</li>
+</ul>
+<p>A sample document per preset (flowchart + fishbone reuse the disabled-accounts example), and an <code>App</code> that switches preset and renders <code>DiagramCanvas</code> full-screen.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Write sample documents</strong></li>
+</ul>
+<pre><code class="language-ts">// src/canvas/samples.ts
+import type { KnowflowDoc, Preset } from &#39;../core/types&#39;;
+
+const meta = { createdAt: &#39;2026-06-13T00:00:00Z&#39;, updatedAt: &#39;2026-06-13T00:00:00Z&#39;, status: &#39;draft&#39; as const, version: 1 };
+
+const flowchart: KnowflowDoc = {
+  id: &#39;sample-flow&#39;, title: &#39;Handling disabled accounts&#39;, preset: &#39;flowchart&#39;, meta,
+  blocks: [
+    { id: &#39;a&#39;, type: &#39;step&#39;, text: &#39;Disabled-account ticket arrives&#39; },
+    { id: &#39;b&#39;, type: &#39;decision&#39;, text: &#39;Account locked?&#39; },
+    { id: &#39;c&#39;, type: &#39;outcome&#39;, text: &#39;Unlock account&#39; },
+    { id: &#39;d&#39;, type: &#39;step&#39;, text: &#39;Reset password&#39; },
+    { id: &#39;e&#39;, type: &#39;decision&#39;, text: &#39;Student account?&#39; },
+    { id: &#39;f&#39;, type: &#39;outcome&#39;, text: &#39;Notify SIS team&#39; },
+    { id: &#39;g&#39;, type: &#39;outcome&#39;, text: &#39;Re-enable in AD&#39; },
+  ],
+  connections: [
+    { id: &#39;e1&#39;, from: &#39;a&#39;, to: &#39;b&#39; },
+    { id: &#39;e2&#39;, from: &#39;b&#39;, to: &#39;c&#39;, label: &#39;Yes&#39; },
+    { id: &#39;e3&#39;, from: &#39;b&#39;, to: &#39;d&#39;, label: &#39;No&#39; },
+    { id: &#39;e4&#39;, from: &#39;d&#39;, to: &#39;e&#39; },
+    { id: &#39;e5&#39;, from: &#39;e&#39;, to: &#39;f&#39;, label: &#39;Yes&#39; },
+    { id: &#39;e6&#39;, from: &#39;e&#39;, to: &#39;g&#39;, label: &#39;No&#39; },
+  ],
+};
+
+const decisionTree: KnowflowDoc = {
+  id: &#39;sample-tree&#39;, title: &#39;Which account action?&#39;, preset: &#39;decisionTree&#39;, meta,
+  blocks: [
+    { id: &#39;q1&#39;, type: &#39;question&#39;, text: &#39;User type?&#39; },
+    { id: &#39;q2&#39;, type: &#39;question&#39;, text: &#39;Still enrolled?&#39; },
+    { id: &#39;o1&#39;, type: &#39;outcome&#39;, text: &#39;Re-enable&#39; },
+    { id: &#39;o2&#39;, type: &#39;outcome&#39;, text: &#39;Suspend&#39; },
+    { id: &#39;o3&#39;, type: &#39;outcome&#39;, text: &#39;Escalate to HR&#39; },
+  ],
+  connections: [
+    { id: &#39;t1&#39;, from: &#39;q1&#39;, to: &#39;q2&#39;, label: &#39;Student&#39; },
+    { id: &#39;t2&#39;, from: &#39;q1&#39;, to: &#39;o3&#39;, label: &#39;Staff&#39; },
+    { id: &#39;t3&#39;, from: &#39;q2&#39;, to: &#39;o1&#39;, label: &#39;Yes&#39; },
+    { id: &#39;t4&#39;, from: &#39;q2&#39;, to: &#39;o2&#39;, label: &#39;No&#39; },
+  ],
+};
+
+const stepList: KnowflowDoc = {
+  id: &#39;sample-steps&#39;, title: &#39;Reset a password&#39;, preset: &#39;stepList&#39;, meta,
+  blocks: [
+    { id: &#39;1&#39;, type: &#39;step&#39;, text: &#39;Open the admin console&#39; },
+    { id: &#39;2&#39;, type: &#39;step&#39;, text: &#39;Search for the user account&#39; },
+    { id: &#39;3&#39;, type: &#39;warning&#39;, text: &#39;Confirm identity before resetting&#39; },
+    { id: &#39;4&#39;, type: &#39;step&#39;, text: &#39;Issue a temporary password&#39; },
+    { id: &#39;5&#39;, type: &#39;note&#39;, text: &#39;User must change it at next login&#39; },
+  ],
+  connections: [],
+};
+
+const fishbone: KnowflowDoc = {
+  id: &#39;sample-fish&#39;, title: &#39;Account stays disabled&#39;, preset: &#39;fishbone&#39;, meta,
+  blocks: [
+    { id: &#39;s&#39;, type: &#39;spine&#39;, text: &#39;Account stays disabled&#39; },
+    { id: &#39;c1&#39;, type: &#39;category&#39;, text: &#39;Students&#39; },
+    { id: &#39;c2&#39;, type: &#39;category&#39;, text: &#39;Staff&#39; },
+    { id: &#39;c3&#39;, type: &#39;category&#39;, text: &#39;Contractors&#39; },
+    { id: &#39;c4&#39;, type: &#39;category&#39;, text: &#39;Guests&#39; },
+    { id: &#39;x1&#39;, type: &#39;cause&#39;, text: &#39;Not enrolled this term&#39;, categoryId: &#39;c1&#39; },
+    { id: &#39;x2&#39;, type: &#39;cause&#39;, text: &#39;Graduated&#39;, categoryId: &#39;c1&#39; },
+    { id: &#39;x3&#39;, type: &#39;cause&#39;, text: &#39;On leave&#39;, categoryId: &#39;c2&#39; },
+    { id: &#39;x4&#39;, type: &#39;cause&#39;, text: &#39;Contract expired&#39;, categoryId: &#39;c3&#39; },
+    { id: &#39;x5&#39;, type: &#39;cause&#39;, text: &#39;Sponsor inactive&#39;, categoryId: &#39;c4&#39; },
+  ],
+  connections: [],
+};
+
+export const SAMPLES: Record&lt;Preset, KnowflowDoc&gt; = { flowchart, decisionTree, stepList, fishbone };
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Replace <code>src/App.tsx</code> with the harness</strong></li>
+</ul>
+<pre><code class="language-tsx">// src/App.tsx
+import { useState } from &#39;react&#39;;
+import type { Preset } from &#39;./core/types&#39;;
+import { ALL_PRESETS } from &#39;./core/types&#39;;
+import { getPreset } from &#39;./core/presets&#39;;
+import { DiagramCanvas } from &#39;./canvas/DiagramCanvas&#39;;
+import { SAMPLES } from &#39;./canvas/samples&#39;;
+import &#39;./App.css&#39;;
+
+export default function App() {
+  const [preset, setPreset] = useState&lt;Preset&gt;(&#39;flowchart&#39;);
+  const doc = SAMPLES[preset];
+
+  return (
+    &lt;div className=&quot;harness&quot;&gt;
+      &lt;header className=&quot;harness-bar&quot;&gt;
+        &lt;span className=&quot;harness-brand&quot;&gt;know&lt;b&gt;flow&lt;/b&gt;&lt;/span&gt;
+        &lt;span className=&quot;harness-title&quot;&gt;{doc.title}&lt;/span&gt;
+        &lt;div className=&quot;harness-presets&quot;&gt;
+          {ALL_PRESETS.map(p =&gt; (
+            &lt;button
+              key={p}
+              className={p === preset ? &#39;on&#39; : &#39;&#39;}
+              onClick={() =&gt; setPreset(p)}
+            &gt;
+              {getPreset(p).name}
+            &lt;/button&gt;
+          ))}
+        &lt;/div&gt;
+      &lt;/header&gt;
+      &lt;div className=&quot;harness-canvas&quot;&gt;
+        &lt;DiagramCanvas doc={doc} /&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  );
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Replace <code>src/App.css</code></strong></li>
+</ul>
+<pre><code class="language-css">/* src/App.css */
+.harness { height: 100vh; display: flex; flex-direction: column; background: #F6F2EA; }
+.harness-bar { display: flex; align-items: center; gap: 16px; padding: 10px 18px;
+  background: #FFFEFB; border-bottom: 1px solid #EAE2D6; }
+.harness-brand { font-family: Georgia, serif; font-weight: 600; font-size: 18px; }
+.harness-brand b { color: #0F766E; }
+.harness-title { font-size: 15px; color: #29281F; }
+.harness-presets { margin-left: auto; display: flex; gap: 6px; }
+.harness-presets button { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  border: 1px solid #DED3C2; background: #fff; color: #5C564B; border-radius: 8px; padding: 6px 12px; }
+.harness-presets button.on { background: #0F766E; color: #fff; border-color: #0F766E; }
+.harness-canvas { flex: 1; min-height: 0; }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run the dev server and verify visually</strong></li>
+</ul>
+<p>Run: <code>npm run dev</code>
+Then open the printed local URL in a browser and confirm ALL of these by hand:</p>
+<ul>
+<li>Flowchart: steps (blue rects), decisions (amber diamonds with upright text), outcomes (green pills), arrows with &quot;Yes&quot;/&quot;No&quot; labels, laid out top-to-bottom without overlap.</li>
+<li>Decision Tree: question diamonds branch to outcomes with answer labels.</li>
+<li>Step List: vertical sequence of numbered-feeling steps, with the warning and note visibly distinct.</li>
+<li>Fishbone: spine on the right, categories alternating above/below, causes branching off categories.</li>
+<li>Switching presets re-renders and the view re-fits.</li>
+<li>No console errors; React Flow attribution hidden; dotted background visible.</li>
+</ul>
+<p>Stop the dev server (Ctrl-C) when done.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Run the full suite + typecheck</strong></li>
+</ul>
+<p>Run: <code>npm test &amp;&amp; npx tsc --noEmit</code>
+Expected: all tests pass, no type errors.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 6: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add src/canvas/samples.ts src/App.tsx src/App.css
+git commit -m &quot;feat(canvas): sample documents and preset-switcher dev harness&quot;
+</code></pre>
+<hr>
+<h2>Task 11: Clean up unused scaffold assets</h2>
+<p><strong>Files:</strong></p>
+<ul>
+<li>Delete: <code>src/assets/react.svg</code>, <code>src/assets/hero.png</code>, <code>src/assets/vite.svg</code> (Vite defaults, now unused)</li>
+<li>Modify: <code>src/index.css</code> (remove Vite default demo styles that conflict; keep a minimal reset + the Hanken Grotesk font import)</li>
+</ul>
+<p>Only remove assets that THIS plan orphaned by replacing <code>App.tsx</code>. Do not touch <code>src/core</code>.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Confirm the assets are unreferenced</strong></li>
+</ul>
+<p>Run: <code>grep -rn &quot;react.svg\|hero.png\|vite.svg&quot; src/</code>
+Expected: no references (the old <code>App.tsx</code> that used them was replaced in Task 10).</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Delete the orphaned assets</strong></li>
+</ul>
+<pre><code class="language-bash">git rm src/assets/react.svg src/assets/hero.png src/assets/vite.svg
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Replace <code>src/index.css</code> with a minimal base</strong></li>
+</ul>
+<pre><code class="language-css">/* src/index.css */
+@import url(&#39;https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;display=swap&#39;);
+
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; }
+body { font-family: &quot;Hanken Grotesk&quot;, ui-sans-serif, system-ui, sans-serif; }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Verify build still works</strong></li>
+</ul>
+<p>Run: <code>npm run build</code>
+Expected: build succeeds with no errors.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 5: Commit</strong></li>
+</ul>
+<pre><code class="language-bash">git add -A
+git commit -m &quot;chore: remove orphaned Vite scaffold assets; minimal base CSS&quot;
+</code></pre>
+<hr>
+<h2>Self-Review (completed by plan author)</h2>
+<p><strong>Spec coverage (Plan 2 = canvas/rendering portion of Slice 1):</strong></p>
+<ul>
+<li>Render all four presets — Tasks 3–6 (layout) + 7 (adapter) + 8–9 (components) + 10 (harness proves all four). ✓</li>
+<li>Per-preset auto-layout — Task 3 (Dagre flowchart/tree), Task 4 (step-list), Task 5 (fishbone), Task 6 (dispatcher). ✓</li>
+<li>React Flow integration with verified v12 API — Tasks 8–9 (nodeTypes outside component, CSS import, read-only props, fitView in effect, ArrowClosed marker). ✓</li>
+<li>Visual language consistent with the approved mockup — Task 2 style table + Task 8 CSS. ✓</li>
+<li>Deferred correctly to later plans: editing (palette/inspector wired to operations) → Plan 3; accessible narrative view + export → Plan 4.</li>
+</ul>
+<p><strong>Placeholder scan:</strong> No TBD/TODO. Pure-logic tasks (1–7) are full TDD with real assertions. Component tasks (8–10) have complete code and an explicit manual verification checklist (correct for a visual canvas where unit tests add little value). ✓</p>
+<p><strong>Type consistency:</strong> <code>Positions</code> defined in <code>graphLayout.ts</code> (Task 3), re-exported from <code>layout/index.ts</code> (Task 6), imported by <code>adapter.ts</code> (Task 7). <code>KnowflowNodeData</code> defined in <code>adapter.ts</code> (Task 7), consumed by <code>KnowflowNode.tsx</code> (Task 8) and <code>DiagramCanvas.tsx</code> (Task 9). Node <code>type: &#39;knowflow&#39;</code> set in adapter (Task 7) matches <code>nodeTypes = { knowflow: KnowflowNode }</code> (Task 9). Handle ids <code>t/b/l/r</code> defined in Task 8 match <code>sourceHandle</code>/<code>targetHandle</code> values in the adapter (Task 7). <code>sizeForShape</code>/<code>styleFor</code> signatures consistent across Tasks 1–8. ✓</p>
+<p><strong>Known limitation flagged in-plan:</strong> fishbone ribs render as straight edges, not true angled spine ribs (functional, not yet pixel-faithful to the mockup) — deferred polish, called out in Task 5/design decisions.</p>
+
+</div></body>
+</html>

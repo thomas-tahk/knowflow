@@ -37,22 +37,6 @@ function sequenceEdges(doc: KnowflowDoc): Edge[] {
   return edges;
 }
 
-function ribEdges(doc: KnowflowDoc): Edge[] {
-  const edges: Edge[] = [];
-  const spine = doc.blocks.find(b => b.type === 'spine');
-  // type 'floating' = our custom diagonal edge; it computes endpoints from node
-  // geometry, so no sourceHandle/targetHandle is set and the line follows the true slant.
-  for (const cat of doc.blocks.filter(b => b.type === 'category')) {
-    if (spine) {
-      edges.push({ id: `rib-${cat.id}-${spine.id}`, source: cat.id, target: spine.id, type: 'floating', markerEnd: MARKER });
-    }
-    for (const cause of doc.blocks.filter(b => b.type === 'cause' && b.categoryId === cat.id)) {
-      edges.push({ id: `rib-${cause.id}-${cat.id}`, source: cause.id, target: cat.id, type: 'floating', markerEnd: MARKER });
-    }
-  }
-  return edges;
-}
-
 export function toReactFlow(doc: KnowflowDoc, positions: Positions): { nodes: Node<KnowflowNodeData>[]; edges: Edge[] } {
   const nodes = nodesFor(doc, positions);
   let edges: Edge[];
@@ -60,7 +44,8 @@ export function toReactFlow(doc: KnowflowDoc, positions: Positions): { nodes: No
     case 'flowchart':
     case 'decisionTree': edges = graphEdges(doc); break;
     case 'stepList':     edges = sequenceEdges(doc); break;
-    case 'fishbone':     edges = ribEdges(doc); break;
+    // Fishbone is rendered by FishboneCanvas (custom SVG), not React Flow.
+    case 'fishbone':     edges = []; break;
   }
   return { nodes, edges };
 }

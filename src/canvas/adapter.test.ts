@@ -52,7 +52,7 @@ describe('toReactFlow adapter', () => {
     expect(edges.map(e => [e.source, e.target])).toEqual([['1', '2'], ['2', '3']]);
   });
 
-  it('synthesizes rib edges for fishbone (cause->category, category->spine)', () => {
+  it('produces no React Flow edges for fishbone (rendered by FishboneCanvas)', () => {
     const doc = build({
       preset: 'fishbone',
       blocks: [
@@ -61,9 +61,8 @@ describe('toReactFlow adapter', () => {
         { id: 'ca1', type: 'cause', text: 'x', categoryId: 'c1' },
       ],
     });
-    const { edges } = toReactFlow(doc, layoutDoc(doc));
-    const pairs = edges.map(e => [e.source, e.target]).sort();
-    expect(pairs).toEqual([['c1', 's'], ['ca1', 'c1']].sort());
-    expect(edges.every(e => e.type === 'floating')).toBe(true);
+    const { nodes, edges } = toReactFlow(doc, layoutDoc(doc));
+    expect(nodes).toHaveLength(3);
+    expect(edges).toHaveLength(0);
   });
 });

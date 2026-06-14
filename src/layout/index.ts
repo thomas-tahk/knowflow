@@ -1,7 +1,6 @@
 import type { KnowflowDoc } from '../core/types';
 import { graphLayout, type Positions } from './graphLayout';
 import { linearLayout } from './linearLayout';
-import { fishboneLayout } from './fishboneLayout';
 
 export type { Positions } from './graphLayout';
 
@@ -13,6 +12,8 @@ export function layoutDoc(doc: KnowflowDoc): Positions {
     case 'stepList':
       return linearLayout(doc);
     case 'fishbone':
-      return fishboneLayout(doc);
+      // Fishbone is rendered by its own SVG component (see FishboneCanvas),
+      // which computes its own geometry; it does not use React Flow positions.
+      return {};
   }
 }

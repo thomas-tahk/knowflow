@@ -3,6 +3,7 @@ import type { Preset } from './core/types';
 import { ALL_PRESETS } from './core/types';
 import { getPreset } from './core/presets';
 import { DiagramCanvas } from './canvas/DiagramCanvas';
+import { FishboneCanvas } from './canvas/FishboneCanvas';
 import { SAMPLES } from './canvas/samples';
 import './App.css';
 
@@ -28,7 +29,9 @@ export default function App() {
         </div>
       </header>
       <div className="harness-canvas">
-        <DiagramCanvas doc={doc} />
+        {preset === 'fishbone'
+          ? <FishboneCanvas doc={doc} />
+          : <DiagramCanvas doc={doc} />}
       </div>
     </div>
   );

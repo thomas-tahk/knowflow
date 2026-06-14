@@ -8,11 +8,9 @@ import type { KnowflowDoc } from '../core/types';
 import { layoutDoc } from '../layout';
 import { toReactFlow, type KnowflowNodeData } from './adapter';
 import { KnowflowNode } from './KnowflowNode';
-import { FloatingEdge } from './FloatingEdge';
 
 // Must be defined outside the component (React Flow requirement).
 const nodeTypes = { knowflow: KnowflowNode };
-const edgeTypes = { floating: FloatingEdge };
 
 interface Props {
   doc: KnowflowDoc;
@@ -36,7 +34,6 @@ function Inner({ doc, onSelect }: Props) {
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
-      edgeTypes={edgeTypes}
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={true}

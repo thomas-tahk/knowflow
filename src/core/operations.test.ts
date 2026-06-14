@@ -44,7 +44,6 @@ describe('operations', () => {
   it('swapBlockType changes a block type', () => {
     const clock = fixedClock();
     let d = createDoc('flowchart', 'T', clock);
-    const id = addBlock(d, 'A', 'step', clock).doc.blocks[0].id;
     d = addBlock(d, 'A', 'step', clock).doc;
     d = swapBlockType(d, d.blocks[0].id, 'decision', clock);
     expect(d.blocks[0].type).toBe('decision');

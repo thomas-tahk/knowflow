@@ -19,7 +19,11 @@ export interface DocSummary {
 const KEY = 'knowflow.documents.v1';
 
 export class DocumentStore {
-  constructor(private storage: KeyValueStorage) {}
+  private storage: KeyValueStorage;
+
+  constructor(storage: KeyValueStorage) {
+    this.storage = storage;
+  }
 
   private readAll(): Record<string, KnowflowDoc> {
     const raw = this.storage.getItem(KEY);

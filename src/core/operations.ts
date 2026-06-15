@@ -59,6 +59,18 @@ export function recategorizeCause(doc: KnowflowDoc, blockId: string, categoryId:
   return touch({ ...doc, blocks: doc.blocks.map(b => (b.id === blockId ? { ...b, categoryId } : b)) }, clock);
 }
 
+export function moveBlock(doc: KnowflowDoc, blockId: string, position: { x: number; y: number }, clock: Clock = systemClock): KnowflowDoc {
+  return touch({ ...doc, blocks: doc.blocks.map(b => (b.id === blockId ? { ...b, position } : b)) }, clock);
+}
+
+export function resizeBlock(doc: KnowflowDoc, blockId: string, size: { w: number; h: number }, clock: Clock = systemClock): KnowflowDoc {
+  return touch({ ...doc, blocks: doc.blocks.map(b => (b.id === blockId ? { ...b, size } : b)) }, clock);
+}
+
+export function resetLayout(doc: KnowflowDoc, clock: Clock = systemClock): KnowflowDoc {
+  return touch({ ...doc, blocks: doc.blocks.map(({ position: _p, size: _s, ...b }) => b) }, clock);
+}
+
 export function reorderBlock(doc: KnowflowDoc, blockId: string, newIndex: number, clock: Clock = systemClock): KnowflowDoc {
   const blocks = [...doc.blocks];
   const from = blocks.findIndex(b => b.id === blockId);

@@ -15,6 +15,10 @@ export interface Block {
   text: string;
   /** Fishbone only: the category a cause attaches to. */
   categoryId?: string;
+  /** Manual placement override (top-left, React Flow coords). Absent → auto-layout. */
+  position?: { x: number; y: number };
+  /** Manual size override. Absent → shape default. */
+  size?: { w: number; h: number };
 }
 
 export interface Connection {

@@ -1,7 +1,6 @@
 import dagre from '@dagrejs/dagre';
 import type { KnowflowDoc } from '../core/types';
-import { sizeForShape } from './sizes';
-import { styleFor } from '../canvas/blockStyles';
+import { effectiveSize } from './sizes';
 
 export interface Positions {
   [blockId: string]: { x: number; y: number };
@@ -15,7 +14,7 @@ export function graphLayout(doc: KnowflowDoc, rankdir: 'TB' | 'LR' = 'TB'): Posi
   g.setDefaultEdgeLabel(() => ({}));
 
   for (const b of doc.blocks) {
-    const { width, height } = sizeForShape(styleFor(b.type).shape);
+    const { width, height } = effectiveSize(b);
     g.setNode(b.id, { width, height });
   }
   for (const c of doc.connections) {
@@ -28,7 +27,8 @@ export function graphLayout(doc: KnowflowDoc, rankdir: 'TB' | 'LR' = 'TB'): Posi
   for (const b of doc.blocks) {
     const n = g.node(b.id);
     // Dagre reports node centers; React Flow positions by top-left.
-    positions[b.id] = { x: n.x - n.width / 2, y: n.y - n.height / 2 };
+    // A manual position override wins over the computed layout.
+    positions[b.id] = b.position ?? { x: n.x - n.width / 2, y: n.y - n.height / 2 };
   }
   return positions;
 }

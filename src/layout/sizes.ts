@@ -11,3 +11,12 @@ const SIZES: Record<Shape, Size> = {
 export function sizeForShape(shape: Shape): Size {
   return SIZES[shape];
 }
+
+import type { Block } from '../core/types';
+import { styleFor } from '../canvas/blockStyles';
+
+/** The size a block should render at: manual override if present, else its shape default. */
+export function effectiveSize(block: Block): Size {
+  if (block.size) return { width: block.size.w, height: block.size.h };
+  return sizeForShape(styleFor(block.type).shape);
+}

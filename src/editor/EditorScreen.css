@@ -18,6 +18,11 @@
   border: 1px solid #DED3C2; background: #fff; color: #5C564B; border-radius: 8px; padding: 6px 10px;
 }
 .editor-export:hover, .editor-menu:hover { border-color: #0F766E; color: #0F766E; }
+.editor-generate {
+  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  border: 1px solid #0F766E; background: #0F766E; color: #fff; border-radius: 8px; padding: 6px 12px;
+}
+.editor-generate:hover { background: #0d655e; }
 .editor-save { font-size: 12.5px; color: #978D7C; min-width: 52px; text-align: right; }
 .editor-save-saved { color: #0F766E; }
 

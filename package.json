@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "@dagrejs/dagre": "^3.0.0",
     "@xyflow/react": "^12.11.0",
     "html-to-image": "^1.11.13",

@@ -13,6 +13,7 @@ import { DiagramCanvas } from '../canvas/DiagramCanvas';
 import { FishboneCanvas } from '../canvas/FishboneCanvas';
 import { Palette } from './Palette';
 import { Inspector } from './Inspector';
+import { GeneratePanel } from './GeneratePanel';
 import { useAutosave } from './useAutosave';
 import './EditorScreen.css';
 
@@ -26,6 +27,7 @@ function seed(preset: Preset): KnowflowDoc {
 export function EditorScreen() {
   const [doc, setDoc] = useState<KnowflowDoc>(() => seed('flowchart'));
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showGenerate, setShowGenerate] = useState(false);
   const status = useAutosave(doc, store);
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -106,6 +108,8 @@ export function EditorScreen() {
           <button className="editor-export" onClick={() => doExport('png')}>PNG</button>
           <button className="editor-export" onClick={() => doExport('pdf')}>PDF</button>
 
+          <button className="editor-generate" onClick={() => setShowGenerate(true)}>✨ Generate</button>
+
           <span className={`editor-save editor-save-${status}`}>
             {status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved' : ''}
           </span>
@@ -143,6 +147,14 @@ export function EditorScreen() {
           onDelete={handleDelete}
         />
       </div>
+
+      {showGenerate && (
+        <GeneratePanel
+          defaultPreset={doc.preset}
+          onClose={() => setShowGenerate(false)}
+          onGenerated={(generated) => { setDoc(generated); setSelectedId(null); setShowGenerate(false); }}
+        />
+      )}
     </div>
   );
 }

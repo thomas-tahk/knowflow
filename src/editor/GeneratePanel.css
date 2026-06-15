@@ -1,0 +1,26 @@
+.gen-overlay {
+  position: fixed; inset: 0; background: rgba(41,40,31,.38);
+  display: flex; align-items: center; justify-content: center; z-index: 50; padding: 24px;
+}
+.gen-panel {
+  width: 520px; max-width: 100%; max-height: 90vh; overflow-y: auto;
+  background: #FFFEFB; border: 1px solid #EAE2D6; border-radius: 16px;
+  padding: 22px; display: flex; flex-direction: column; gap: 14px;
+  box-shadow: 0 24px 60px -24px rgba(41,40,31,.45);
+}
+.gen-title { margin: 0; font-size: 18px; color: #29281F; }
+.gen-field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; font-weight: 600; color: #5C564B; }
+.gen-field input, .gen-field select, .gen-field textarea {
+  font: inherit; font-weight: 500; font-size: 14px; color: #29281F;
+  border: 1px solid #DED3C2; border-radius: 8px; padding: 8px 10px; background: #fff; resize: vertical;
+}
+.gen-field input:focus, .gen-field select:focus, .gen-field textarea:focus {
+  outline: 2px solid #0F766E; outline-offset: 1px; border-color: #0F766E;
+}
+.gen-imagename { font-weight: 500; color: #0F766E; }
+.gen-error { margin: 0; font-size: 13px; color: #8A4632; background: #F6E7E2; border: 1px solid #D9A18F; border-radius: 8px; padding: 8px 10px; }
+.gen-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.gen-cancel, .gen-go { font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; border-radius: 8px; padding: 8px 16px; }
+.gen-cancel { border: 1px solid #DED3C2; background: #fff; color: #5C564B; }
+.gen-go { border: 1px solid #0F766E; background: #0F766E; color: #fff; }
+.gen-go:disabled, .gen-cancel:disabled { opacity: .5; cursor: not-allowed; }

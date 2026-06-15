@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>knowflow — Plan 3: Editing UI</title>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --paper:#F6F2EA; --ink:#29281F; --ink2:#5C564B; --muted:#978D7C;
+    --line:#E4DBCD; --accent:#0F766E; --code-bg:#FBF8F2; }
+  *{box-sizing:border-box}
+  body{ margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Hanken Grotesk",ui-sans-serif,system-ui,sans-serif; line-height:1.6; }
+  .wrap{ max-width:880px; margin:0 auto; padding:48px 28px 120px; }
+  h1,h2,h3,h4{ line-height:1.25; }
+  h1{ font-size:30px; border-bottom:2px solid var(--accent); padding-bottom:.35em; }
+  h2{ font-size:22px; margin-top:2em; border-bottom:1px solid var(--line); padding-bottom:.3em; }
+  h3{ font-size:17px; margin-top:1.6em; color:#1e3a36; }
+  h4{ font-size:14.5px; color:var(--ink2); }
+  a{ color:var(--accent); }
+  p,li{ font-size:15px; }
+  code{ font-family:"JetBrains Mono",monospace; font-size:13px; background:var(--code-bg);
+    border:1px solid var(--line); border-radius:5px; padding:1px 5px; }
+  pre{ background:var(--code-bg); border:1px solid var(--line); border-radius:12px;
+    padding:16px 18px; overflow-x:auto; }
+  pre code{ border:0; padding:0; background:none; font-size:12.5px; line-height:1.55; }
+  blockquote{ border-left:3px solid var(--accent); margin:1em 0; padding:.4em 1em;
+    background:#EAF1EF; border-radius:0 8px 8px 0; color:var(--ink2); }
+  table{ border-collapse:collapse; width:100%; margin:1em 0; font-size:14px; }
+  th,td{ border:1px solid var(--line); padding:7px 10px; text-align:left; vertical-align:top; }
+  th{ background:#F0E9DC; }
+  hr{ border:0; border-top:1px solid var(--line); margin:2.5em 0; }
+  input[type=checkbox]{ margin-right:8px; }
+  li{ margin:.2em 0; }
+</style>
+</head>
+<body><div class="wrap">
+<h1>knowflow Slice 1 — Plan 3: Editing UI Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Turn the read-only canvas (Plan 2) into an intuitive editor. The user can select any part, edit its text, change its type, add/remove blocks, and — for the three React Flow presets — drag to reposition and drag handles to resize. Every change is an immutable operation on the one <code>KnowflowDoc</code>, and the document autosaves to the browser.</p>
+<p><strong>Architecture:</strong> Editing stays pure-function-first. The canvas surfaces <em>intent</em> (selected this, dragged that to here, typed this text) and calls a small set of operations from <code>src/core/operations.ts</code>; the returned new doc flows back down as the single source of truth. Manual placement is modeled as <strong>optional per-block overrides</strong> (<code>position</code>, <code>size</code>) on the document — auto-layout computes the default, an override wins when present. A right-hand <strong>Inspector</strong> edits the selected block; a <strong>Palette</strong> adds new blocks; <strong>autosave</strong> debounces the doc into the existing <code>DocumentStore</code>.</p>
+<p><strong>Tech Stack:</strong> React 19 + Vite + TypeScript, <code>@xyflow/react</code> v12, Vitest. Builds on Plan 1 core (<code>docs/plans/2026-06-12-knowflow-slice1-foundation.md</code>) and Plan 2 canvas (<code>docs/plans/2026-06-13-knowflow-slice1-plan2-canvas.md</code>).</p>
+<p><strong>This is Plan 3 of the Slice 1 / demo-MVP arc.</strong> Plan 4 = save/load UI + PDF/PNG export. Plan 5 = AI text+image generation.</p>
+<p><strong>Verified library facts (React Flow v12, from official docs):</strong></p>
+<ul>
+<li>Editable canvas: <code>nodesDraggable</code>, <code>elementsSelectable</code> true; commit position on <code>onNodeDragStop(_, node)</code> (node.position is top-left, the same convention our adapter uses).</li>
+<li>Resize: <code>&lt;NodeResizer&gt;</code> from <code>@xyflow/react</code> rendered <em>inside</em> a custom node, shown when <code>selected</code>; <code>onResizeEnd(_, params)</code> gives <code>{width, height, x, y}</code>. Requires the node CSS to allow the element to fill (<code>width:100%; height:100%</code>).</li>
+<li>Controlled nodes: seed <code>useNodesState</code> from derived nodes, re-sync via <code>useEffect</code> when the doc identity changes; commit drag/resize back to the doc (doc stays source of truth, React Flow holds transient interaction state).</li>
+<li><code>&#39;@xyflow/react/dist/style.css&#39;</code> already imported in <code>DiagramCanvas</code>.</li>
+</ul>
+<hr>
+<h2>Design decisions locked for this plan</h2>
+<ul>
+<li><strong>Doc is the single source of truth.</strong> React Flow never owns state long-term; on drag/resize <em>end</em> we write an override into the doc, then nodes re-derive. No live per-pixel doc churn.</li>
+<li><strong>Manual placement = overrides, not replacement.</strong> New optional <code>Block.position?</code> / <code>Block.size?</code>. Auto-layout still runs; the adapter prefers the override when present. &quot;Reset layout&quot; (clears overrides) is a one-line op we expose as a toolbar button so a user can always get back to a clean auto-layout.</li>
+<li><strong>Fishbone editing is text + structure only this plan</strong> (add/remove/edit categories &amp; causes, edit the effect text, via Inspector + Palette). Drag/resize of fishbone parts is explicitly deferred (custom SVG; flagged to the user). Its selection is already wired.</li>
+<li><strong>Inspector is type-aware.</strong> The block-type dropdown only offers types valid for the current preset (<code>getPreset(preset).blockTypes</code>). For fishbone, the Palette offers &quot;Add category&quot; / &quot;Add cause (to selected category)&quot;.</li>
+<li><strong>Autosave, not Save button</strong> (Save/load UI is Plan 4). Debounced write to <code>DocumentStore</code> under the doc&#39;s id.</li>
+</ul>
+<h2>File Structure</h2>
+<ul>
+<li><code>src/core/types.ts</code> — extend <code>Block</code> with optional <code>position?</code>, <code>size?</code>.</li>
+<li><code>src/core/operations.ts</code> — add <code>moveBlock</code>, <code>resizeBlock</code>, <code>resetLayout</code>.</li>
+<li><code>src/layout/sizes.ts</code> — add <code>effectiveSize(block)</code> helper (override else shape default).</li>
+<li><code>src/layout/graphLayout.ts</code> / <code>linearLayout.ts</code> — use <code>effectiveSize</code>; apply <code>position</code> override after compute.</li>
+<li><code>src/canvas/adapter.ts</code> — node <code>position</code> = override ?? computed; pass <code>width/height</code> + <code>blockId</code> into node <code>data</code>.</li>
+<li><code>src/canvas/KnowflowNode.tsx</code> — render <code>NodeResizer</code> when selected + editable; use effective size.</li>
+<li><code>src/canvas/DiagramCanvas.tsx</code> — add <code>editable</code> mode: draggable/selectable, <code>onNodeDragStop</code>, resize commit, controlled nodes synced to doc.</li>
+<li><code>src/editor/Inspector.tsx</code> — edit text / type / delete for the selected block (+ effect text for fishbone).</li>
+<li><code>src/editor/Palette.tsx</code> — add-block buttons valid for the preset.</li>
+<li><code>src/editor/EditorScreen.tsx</code> — composes toolbar + Palette + canvas + Inspector around one doc with autosave.</li>
+<li><code>src/editor/useAutosave.ts</code> — debounced persistence hook.</li>
+<li><code>src/App.tsx</code> — mount <code>EditorScreen</code> (seeded from a sample for now; AI/new-doc entry comes in Plan 5).</li>
+</ul>
+<hr>
+<h2>Task 1: Extend the document model with placement overrides</h2>
+<p><strong>Files:</strong> <code>src/core/types.ts</code>, <code>src/core/types.test.ts</code></p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Add optional fields to <code>Block</code></strong></li>
+</ul>
+<pre><code class="language-ts">export interface Block {
+  id: string;
+  type: BlockType;
+  text: string;
+  /** Fishbone only: the category a cause attaches to. */
+  categoryId?: string;
+  /** Manual placement override (top-left, React Flow coords). Absent → auto-layout. */
+  position?: { x: number; y: number };
+  /** Manual size override. Absent → shape default. */
+  size?: { w: number; h: number };
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Test</strong> that a block with overrides still round-trips through <code>exportJson</code>/<code>importJson</code> (extend an existing serialize test or add one asserting <code>position</code>/<code>size</code> survive).</li>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Run <code>npm test</code></strong> — green.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Commit</strong> <code>feat(core): per-block position/size overrides</code>.</li>
+</ul>
+<hr>
+<h2>Task 2: Placement operations</h2>
+<p><strong>Files:</strong> <code>src/core/operations.ts</code>, <code>src/core/operations.test.ts</code></p>
+<ul>
+<li><p><input disabled="" type="checkbox"> <strong>Step 1: Write failing tests</strong> for <code>moveBlock</code>, <code>resizeBlock</code>, <code>resetLayout</code>:</p>
+<ul>
+<li><code>moveBlock(doc, id, {x,y}, clock)</code> sets <code>position</code> on that block only, bumps <code>updatedAt</code>, leaves others untouched.</li>
+<li><code>resizeBlock(doc, id, {w,h}, clock)</code> sets <code>size</code>.</li>
+<li><code>resetLayout(doc, clock)</code> strips <code>position</code> and <code>size</code> from every block.</li>
+</ul>
+</li>
+<li><p><input disabled="" type="checkbox"> <strong>Step 2: Implement</strong> (mirrors existing immutable style):</p>
+</li>
+</ul>
+<pre><code class="language-ts">export function moveBlock(doc: KnowflowDoc, blockId: string, position: { x: number; y: number }, clock: Clock = systemClock): KnowflowDoc {
+  return touch({ ...doc, blocks: doc.blocks.map(b =&gt; (b.id === blockId ? { ...b, position } : b)) }, clock);
+}
+
+export function resizeBlock(doc: KnowflowDoc, blockId: string, size: { w: number; h: number }, clock: Clock = systemClock): KnowflowDoc {
+  return touch({ ...doc, blocks: doc.blocks.map(b =&gt; (b.id === blockId ? { ...b, size } : b)) }, clock);
+}
+
+export function resetLayout(doc: KnowflowDoc, clock: Clock = systemClock): KnowflowDoc {
+  return touch({ ...doc, blocks: doc.blocks.map(({ position: _p, size: _s, ...b }) =&gt; b) }, clock);
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Run <code>npm test</code></strong> — green.  <strong>Step 4: Commit</strong> <code>feat(core): move/resize/resetLayout operations</code>.</li>
+</ul>
+<hr>
+<h2>Task 3: Effective size + overrides in layout</h2>
+<p><strong>Files:</strong> <code>src/layout/sizes.ts</code>, <code>src/layout/graphLayout.ts</code>, <code>src/layout/linearLayout.ts</code>, tests</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Add <code>effectiveSize</code></strong> to <code>sizes.ts</code>:</li>
+</ul>
+<pre><code class="language-ts">import type { Block } from &#39;../core/types&#39;;
+import { styleFor } from &#39;../canvas/blockStyles&#39;;
+
+export function effectiveSize(block: Block): Size {
+  if (block.size) return { width: block.size.w, height: block.size.h };
+  return sizeForShape(styleFor(block.type).shape);
+}
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Use it in <code>graphLayout</code> and <code>linearLayout</code></strong> (replace <code>sizeForShape(styleFor(b.type).shape)</code> with <code>effectiveSize(b)</code>), and after computing positions, apply the override: <code>positions[b.id] = b.position ?? computed</code>.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Tests</strong> — a block with a <code>position</code> override keeps exactly that position out of <code>graphLayout</code>; a block with a <code>size</code> override changes spacing. <strong>Step 4: <code>npm test</code></strong> green. <strong>Step 5: Commit</strong> <code>feat(layout): honor per-block size/position overrides</code>.</li>
+</ul>
+<hr>
+<h2>Task 4: Adapter carries size + ids into node data</h2>
+<p><strong>Files:</strong> <code>src/canvas/adapter.ts</code>, <code>src/canvas/adapter.test.ts</code></p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1:</strong> Extend <code>KnowflowNodeData</code> with <code>width: number; height: number</code> (from <code>effectiveSize</code>) and keep <code>blockType</code>/<code>text</code>. Node <code>position</code> = <code>block.position ?? positions[id] ?? {0,0}</code>.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Tests</strong> — node data includes width/height; an overridden position shows on the node. <strong>Step 3: <code>npm test</code></strong> green. <strong>Step 4: Commit</strong> <code>feat(canvas): adapter passes size + honors position override</code>.</li>
+</ul>
+<hr>
+<h2>Task 5: Resizable, size-aware custom node</h2>
+<p><strong>Files:</strong> <code>src/canvas/KnowflowNode.tsx</code>, <code>src/canvas/KnowflowNode.css</code></p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1:</strong> Use <code>data.width/height</code> for the node box size (instead of <code>sizeForShape</code> only). Render <code>&lt;NodeResizer minWidth={90} minHeight={40} isVisible={selected} /&gt;</code> (import from <code>@xyflow/react</code>) so handles appear only on the selected node. Keep the diamond rotate technique; for diamonds keep aspect square via <code>keepAspectRatio</code>.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 2: CSS</strong> — node root <code>width:100%; height:100%</code> so it fills the resized frame; style the resizer handles subtly (teal).</li>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Typecheck</strong> <code>npx tsc --noEmit</code>. <strong>Step 4: Commit</strong> <code>feat(canvas): resizable node with NodeResizer</code>.</li>
+</ul>
+<hr>
+<h2>Task 6: Editable DiagramCanvas</h2>
+<p><strong>Files:</strong> <code>src/canvas/DiagramCanvas.tsx</code></p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1:</strong> Add <code>editable?: boolean</code> and callbacks <code>onMove(id, pos)</code>, <code>onResize(id, size)</code> to props. When <code>editable</code>:<ul>
+<li><code>nodesDraggable</code>, <code>elementsSelectable</code> true; seed <code>useNodesState</code> from derived nodes; re-sync in a <code>useEffect</code> keyed on <code>doc</code>.</li>
+<li><code>onNodeDragStop={(_, n) =&gt; onMove(n.id, n.position)}</code>.</li>
+<li>On resize end (bubbled from the node via <code>onResize</code>), commit size.</li>
+<li>Keep <code>onSelect</code> wired to selection.</li>
+</ul>
+</li>
+<li><input disabled="" type="checkbox"> <strong>Step 2:</strong> Read-only mode unchanged (the default; fishbone still uses <code>FishboneCanvas</code>). <strong>Step 3: Typecheck.</strong> <strong>Step 4: Commit</strong> <code>feat(canvas): editable mode (drag to move, commit to doc)</code>.</li>
+</ul>
+<hr>
+<h2>Task 7: Inspector panel</h2>
+<p><strong>Files:</strong> <code>src/editor/Inspector.tsx</code>, <code>src/editor/Inspector.css</code></p>
+<p>A right-hand panel bound to the selected block. No unit test (UI; verified in the harness), but keep it a pure function of <code>{ doc, selectedId }</code> + callbacks.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1:</strong> Render, for the selected block:<ul>
+<li>a multiline <strong>text</strong> field → <code>onChangeText(id, text)</code> (calls <code>updateBlockText</code>),</li>
+<li>a <strong>type</strong> dropdown limited to <code>getPreset(doc.preset).blockTypes</code> → <code>onChangeType(id, type)</code> (<code>swapBlockType</code>); hidden for <code>spine</code>,</li>
+<li>for fishbone causes, a <strong>category</strong> dropdown → <code>recategorizeCause</code>,</li>
+<li>a <strong>Delete</strong> button → <code>onDelete(id)</code> (<code>deleteBlock</code>; refuse to delete the lone <code>spine</code>).</li>
+<li>Empty state when nothing selected: a short hint.</li>
+</ul>
+</li>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Commit</strong> <code>feat(editor): type-aware inspector</code>.</li>
+</ul>
+<hr>
+<h2>Task 8: Palette</h2>
+<p><strong>Files:</strong> <code>src/editor/Palette.tsx</code>, <code>src/editor/Palette.css</code></p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1:</strong> A small toolbar of &quot;add&quot; buttons derived from the preset&#39;s <code>blockTypes</code>. Non-fishbone: &quot;Add step / decision / outcome…&quot; → <code>addBlock</code>, then auto-connect from the selected block (<code>addConnection</code>) for graph presets. Fishbone: &quot;Add category&quot; (→ new <code>category</code>) and &quot;Add cause&quot; (→ <code>cause</code> with <code>categoryId</code> = selected category, disabled until a category is selected).</li>
+<li><input disabled="" type="checkbox"> <strong>Step 2:</strong> Include a <strong>Reset layout</strong> button → <code>resetLayout</code>. <strong>Step 3: Commit</strong> <code>feat(editor): add-block palette + reset layout</code>.</li>
+</ul>
+<hr>
+<h2>Task 9: Autosave hook</h2>
+<p><strong>Files:</strong> <code>src/editor/useAutosave.ts</code>, <code>src/editor/useAutosave.test.ts</code></p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1: Test</strong> (with fake timers + an in-memory <code>KeyValueStorage</code>) that rapid doc changes result in a single debounced <code>store.save</code> with the latest doc.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 2: Implement</strong> <code>useAutosave(doc, store, delay=600)</code> — debounced effect calling <code>store.save(doc)</code>; returns a <code>&#39;idle&#39; | &#39;saving&#39; | &#39;saved&#39;</code> status for the toolbar.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 3: <code>npm test</code></strong> green. <strong>Step 4: Commit</strong> <code>feat(editor): debounced autosave</code>.</li>
+</ul>
+<hr>
+<h2>Task 10: EditorScreen + wire-up + harness</h2>
+<p><strong>Files:</strong> <code>src/editor/EditorScreen.tsx</code>, <code>src/editor/EditorScreen.css</code>, <code>src/App.tsx</code></p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Step 1:</strong> <code>EditorScreen</code> holds the doc in state, seeded from a sample (Plan 5 will seed from AI / new-doc). Layout: top toolbar (brand, title, autosave status, Reset layout) · left Palette · center canvas (<code>FishboneCanvas</code> for fishbone, editable <code>DiagramCanvas</code> otherwise) · right Inspector. All callbacks apply the matching operation with the real clock and <code>setDoc</code>. Track <code>selectedId</code> in state.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 2:</strong> Replace the Plan 2 preset-switcher <code>App.tsx</code> with <code>EditorScreen</code>. Keep a small preset switcher in the toolbar (re-seeds from that preset&#39;s sample) so all four remain demoable.</li>
+<li><input disabled="" type="checkbox"> <strong>Step 3: Run <code>npm run dev</code></strong> and verify by hand:<ul>
+<li>Select a block → Inspector fills; edit text → node + (fishbone) narration-ready text updates live.</li>
+<li>Change type → restyles; add via Palette → appears and (graph) links from selection.</li>
+<li>Drag a node → it stays where dropped after reload (override persisted); resize a node → size persists.</li>
+<li>Reset layout → overrides cleared, clean auto-layout returns.</li>
+<li>Delete works; lone spine can&#39;t be deleted.</li>
+<li>Reload page → the edited doc is still there (autosave).</li>
+</ul>
+</li>
+<li><input disabled="" type="checkbox"> <strong>Step 4: Run <code>npm test &amp;&amp; npm run build</code></strong> — all green, build succeeds. <strong>Step 5: Commit</strong> <code>feat(editor): editing screen wiring + autosave + harness</code>.</li>
+</ul>
+<hr>
+<h2>Self-Review checklist (fill at execution)</h2>
+<ul>
+<li><input disabled="" type="checkbox"> Doc remains the single source of truth; React Flow holds only transient interaction state.</li>
+<li><input disabled="" type="checkbox"> Overrides are additive and reversible (Reset layout).</li>
+<li><input disabled="" type="checkbox"> Fishbone limitation (no drag/resize yet) is the only deliberate gap; text+structure editing works there.</li>
+<li><input disabled="" type="checkbox"> No secrets, no network calls (AI is Plan 5).</li>
+<li><input disabled="" type="checkbox"> <code>npm test</code> + <code>npm run build</code> clean.</li>
+</ul>
+
+</div></body>
+</html>

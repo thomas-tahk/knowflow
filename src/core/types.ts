@@ -39,6 +39,8 @@ export interface DocMeta {
 export interface KnowflowDoc {
   id: string;
   title: string;
+  /** Optional one-line "what & when" shown as a subtitle on the diagram. */
+  description?: string;
   preset: Preset;
   blocks: Block[];
   connections: Connection[];

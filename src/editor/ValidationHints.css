@@ -1,0 +1,24 @@
+.vh-pill, .vh-panel {
+  position: absolute; right: 16px; bottom: 16px; z-index: 6;
+  font-size: 12.5px; color: #6A4E14;
+}
+.vh-pill {
+  cursor: pointer; font-weight: 600; border: 1px solid #E0C879; background: #FBF1D4;
+  border-radius: 999px; padding: 7px 13px; box-shadow: 0 8px 22px -14px rgba(41,40,31,.4);
+}
+.vh-pill:hover { background: #F7E9BE; }
+.vh-panel {
+  width: 280px; max-height: 220px; overflow-y: auto; background: #FFFDF6; border: 1px solid #E0C879;
+  border-radius: 12px; box-shadow: 0 16px 36px -18px rgba(41,40,31,.45);
+}
+.vh-head {
+  display: flex; align-items: center; justify-content: space-between; font-weight: 700;
+  padding: 9px 12px; border-bottom: 1px solid #EFE2BD; position: sticky; top: 0; background: #FFFDF6;
+}
+.vh-actions button {
+  font: inherit; font-size: 14px; line-height: 1; cursor: pointer; border: 0; background: transparent;
+  color: #978D7C; padding: 2px 5px; border-radius: 5px;
+}
+.vh-actions button:hover { background: #F1E7C7; color: #6A4E14; }
+.vh-panel ul { margin: 0; padding: 8px 12px 12px 26px; display: flex; flex-direction: column; gap: 5px; }
+.vh-panel li { line-height: 1.35; }

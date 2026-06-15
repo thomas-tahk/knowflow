@@ -7,6 +7,10 @@
 }
 .brand { font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 20px; letter-spacing: -.01em; }
 .brand b { color: #0F766E; font-weight: 700; }
+.preset-tag {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+  color: #7a6f5a; background: #EFE7D8; border-radius: 999px; padding: 3px 10px;
+}
 .title-input {
   font-family: "Fraunces", Georgia, serif; font-size: 16px; font-weight: 500; color: #29281F;
   border: 1px solid transparent; background: transparent; border-radius: 7px; padding: 5px 9px; min-width: 220px;
@@ -22,6 +26,13 @@
 .tbtn.ghost { border-style: dashed; }
 .tbtn.danger { color: #8A4632; }
 .tbtn.danger:hover { border-color: #C0573E; color: #C0573E; background: #F9EEEA; }
+.tbtn.active { background: #0F766E; border-color: #0F766E; color: #fff; }
+
+.connect-banner {
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 6;
+  font-size: 12.5px; color: #0B5D56; background: #E4EFEC; border: 1px solid #9EC7C0;
+  border-radius: 999px; padding: 7px 14px; box-shadow: 0 8px 22px -14px rgba(41,40,31,.4);
+}
 .export-wrap { position: relative; }
 .export-menu {
   position: absolute; right: 0; top: 40px; background: #fff; border: 1px solid #DED3C2;

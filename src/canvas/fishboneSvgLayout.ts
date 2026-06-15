@@ -1,6 +1,13 @@
 import type { KnowflowDoc, BlockType } from '../core/types';
+import { estimateSize } from '../layout/sizes';
 
 export interface LabelBox { id: string; type: BlockType; text: string; cx: number; cy: number; w: number; h: number; }
+
+/** Size a fishbone label to its text, clamped to keep the diagram tidy. */
+function labelSize(text: string, min: number, max: number): { w: number; h: number } {
+  const { width, height } = estimateSize(text, 'rect');
+  return { w: Math.max(min, Math.min(max, width)), h: height };
+}
 export interface Seg { x1: number; y1: number; x2: number; y2: number; }
 export interface CauseGeom { box: LabelBox; twig: Seg; }
 export interface CategoryGeom { box: LabelBox; rib: Seg; causes: CauseGeom[]; }
@@ -15,8 +22,8 @@ const COL = 210;       // x distance between rib joints along the spine
 const RIB_RUN = 70;    // horizontal run of a rib (joint.x - category.x)
 const RIB_RISE = 150;  // vertical rise of a rib above/below the spine
 const HEAD_W = 210, HEAD_H = 76;
-const CAT_W = 142, CAT_H = 46;
-const CAUSE_W = 132, CAUSE_H = 36;
+const CAT_W = 142;   // minimum category width (grows to fit text)
+const CAUSE_W = 132; // minimum cause width (grows to fit text)
 const TWIG_LEN = 26;   // horizontal twig from the rib to a cause label
 const PAD = 36;        // viewBox padding
 const LEFT = 60;       // spine tail x
@@ -31,9 +38,11 @@ export function fishboneSvgLayout(doc: KnowflowDoc): FishboneGeom {
   const spineRight = LEFT + (n + 1) * COL;
 
   const spine: Seg | null = spineBlock ? { x1: LEFT, y1: 0, x2: spineRight, y2: 0 } : null;
-  const head: LabelBox | null = spineBlock
-    ? { id: spineBlock.id, type: 'spine', text: spineBlock.text, cx: spineRight + HEAD_W / 2, cy: 0, w: HEAD_W, h: HEAD_H }
-    : null;
+  let head: LabelBox | null = null;
+  if (spineBlock) {
+    const hs = labelSize(spineBlock.text, HEAD_W, 280);
+    head = { id: spineBlock.id, type: 'spine', text: spineBlock.text, cx: spineRight + hs.w / 2, cy: 0, w: hs.w, h: Math.max(HEAD_H, hs.h) };
+  }
 
   const cats: CategoryGeom[] = categories.map((cat, i) => {
     const above = i % 2 === 0;
@@ -42,15 +51,17 @@ export function fishboneSvgLayout(doc: KnowflowDoc): FishboneGeom {
     const catCx = jx - RIB_RUN;               // category sits up/down and back toward the tail
     const catCy = sign * RIB_RISE;
     const rib: Seg = { x1: catCx, y1: catCy, x2: jx, y2: 0 };
-    const box: LabelBox = { id: cat.id, type: 'category', text: cat.text, cx: catCx, cy: catCy, w: CAT_W, h: CAT_H };
+    const cs = labelSize(cat.text, CAT_W, 200);
+    const box: LabelBox = { id: cat.id, type: 'category', text: cat.text, cx: catCx, cy: catCy, w: cs.w, h: cs.h };
 
     const causeBlocks = doc.blocks.filter(b => b.type === 'cause' && b.categoryId === cat.id);
     const causes: CauseGeom[] = causeBlocks.map((cz, j) => {
       const t = (j + 1) / (causeBlocks.length + 1); // fraction along the rib, spine -> category
       const px = jx + t * (catCx - jx);
       const py = t * catCy;
+      const zs = labelSize(cz.text, CAUSE_W, 190);
       const twig: Seg = { x1: px, y1: py, x2: px - TWIG_LEN, y2: py };
-      const cbox: LabelBox = { id: cz.id, type: 'cause', text: cz.text, cx: px - TWIG_LEN - CAUSE_W / 2, cy: py, w: CAUSE_W, h: CAUSE_H };
+      const cbox: LabelBox = { id: cz.id, type: 'cause', text: cz.text, cx: px - TWIG_LEN - zs.w / 2, cy: py, w: zs.w, h: zs.h };
       return { box: cbox, twig };
     });
     return { box, rib, causes };

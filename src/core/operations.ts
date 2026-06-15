@@ -73,6 +73,10 @@ export function renameDoc(doc: KnowflowDoc, title: string, clock: Clock = system
   return touch({ ...doc, title }, clock);
 }
 
+export function setDescription(doc: KnowflowDoc, description: string, clock: Clock = systemClock): KnowflowDoc {
+  return touch({ ...doc, description }, clock);
+}
+
 export function moveBlock(doc: KnowflowDoc, blockId: string, position: { x: number; y: number }, clock: Clock = systemClock): KnowflowDoc {
   return touch({ ...doc, blocks: doc.blocks.map(b => (b.id === blockId ? { ...b, position } : b)) }, clock);
 }

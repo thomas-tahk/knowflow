@@ -17,6 +17,9 @@
 .kf-node .react-flow__handle { width: 9px; height: 9px; background: #0F766E; border: 1.5px solid #fff; opacity: 0; transition: opacity .12s; }
 .kf-editable:hover .react-flow__handle,
 .kf-editable.kf-selected .react-flow__handle { opacity: 1; }
+/* Connect mode */
+.kf-connecting .react-flow__pane, .kf-connecting .kf-node { cursor: crosshair; }
+.kf-pending .kf-node { outline: 3px dashed #0F766E; outline-offset: 3px; }
 /* Resize affordances (editable mode only) */
 .kf-resize-line { border-color: #0F766E !important; }
 .kf-resize-handle { background: #0F766E !important; border: 1.5px solid #fff !important; border-radius: 2px; width: 8px; height: 8px; }

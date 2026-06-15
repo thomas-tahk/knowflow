@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, ConnectionMode, useReactFlow, useNodesState,
   type Node, type Edge, type Connection,
@@ -16,6 +16,7 @@ interface Props {
   doc: KnowflowDoc;
   editable?: boolean;
   connectable?: boolean;
+  connectMode?: boolean;
   focusId?: string | null;
   selectedEdgeId?: string | null;
   onSelect?: (blockId: string | null) => void;
@@ -27,9 +28,11 @@ interface Props {
 }
 
 function Inner(props: Props) {
-  const { doc, editable = false, connectable = false, focusId, selectedEdgeId,
+  const { doc, editable = false, connectable = false, connectMode = false, focusId, selectedEdgeId,
     onSelect, onSelectEdge, onMove, onResize, onConnect, onDeleteConnection } = props;
   const { fitView } = useReactFlow();
+  const [pending, setPending] = useState<string | null>(null);
+  useEffect(() => { if (!connectMode) setPending(null); }, [connectMode]);
 
   const derived = useMemo(() => toReactFlow(doc, layoutDoc(doc)), [doc]);
 
@@ -66,18 +69,36 @@ function Inner(props: Props) {
     [derived.edges, selectedEdgeId],
   );
 
+  // Click-to-connect: first click picks the source, second click links to the target.
+  const handleNodeClick = useCallback((_: unknown, node: Node) => {
+    if (!connectMode) return;
+    setPending(prev => {
+      if (!prev) return node.id;
+      if (node.id !== prev) onConnect?.(prev, node.id);
+      return null;
+    });
+  }, [connectMode, onConnect]);
+
+  const renderNodes = useMemo(
+    () => (connectMode ? nodes.map(n => ({ ...n, className: n.id === pending ? 'kf-pending' : undefined })) : nodes),
+    [nodes, connectMode, pending],
+  );
+
   return (
     <ReactFlow
-      nodes={nodes}
+      nodes={renderNodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      className={connectMode ? 'kf-connecting' : undefined}
       onNodesChange={onNodesChange}
-      nodesDraggable={editable}
+      nodesDraggable={editable && !connectMode}
       nodesConnectable={editable && connectable}
       elementsSelectable={true}
       connectionMode={ConnectionMode.Loose}
       onConnect={(c: Connection) => { if (c.source && c.target && c.source !== c.target) onConnect?.(c.source, c.target); }}
       onEdgesDelete={(eds) => eds.forEach(e => onDeleteConnection?.(e.id))}
+      onNodeClick={handleNodeClick}
+      onPaneClick={() => setPending(null)}
       onNodeDragStop={editable ? handleDragStop : undefined}
       onSelectionChange={({ nodes: ns, edges: es }) => { onSelect?.(ns[0]?.id ?? null); onSelectEdge?.(es[0]?.id ?? null); }}
       snapToGrid={editable}

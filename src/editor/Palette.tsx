@@ -16,10 +16,9 @@ export function Palette({ doc, selectedId, onAdd, onReset }: Props) {
   // 'spine' is single and seeded, so it is never an "add" option.
   const addable = getPreset(doc.preset).blockTypes.filter(t => t !== 'spine');
   const selected = doc.blocks.find(b => b.id === selectedId);
-  const causeNeedsCategory = isFishbone && selected?.type !== 'category';
 
   const hint = isFishbone
-    ? 'Add a category, then select it to add causes under it.'
+    ? 'Add causes under a category — select a category first, or just add a cause and one is made for you.'
     : selected
       ? 'New blocks link from the selected one.'
       : 'Tip: select a block first so new ones connect to it.';
@@ -31,13 +30,11 @@ export function Palette({ doc, selectedId, onAdd, onReset }: Props) {
       {addable.map(t => {
         const meta = BLOCK_META[t];
         const s = styleFor(t);
-        const disabled = t === 'cause' && causeNeedsCategory;
         return (
           <button
             key={t}
             className="add-item"
-            disabled={disabled}
-            title={disabled ? 'Select a category first' : `Add a ${meta.label.toLowerCase()}`}
+            title={`Add a ${meta.label.toLowerCase()}`}
             onClick={() => onAdd(t)}
           >
             <span className={`add-swatch swatch-${s.shape}`} style={{ background: s.bg, borderColor: s.border }} />

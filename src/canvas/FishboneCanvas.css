@@ -1,5 +1,22 @@
-.fb-wrap { width: 100%; height: 100%; background: #F6F2EA; overflow: hidden; }
+.fb-wrap {
+  position: relative; width: 100%; height: 100%; overflow: hidden; touch-action: none;
+  cursor: grab;
+  background: radial-gradient(circle at 1px 1px, #D8E0E9 1px, transparent 0) 0 0 / 24px 24px, #F6F2EA;
+}
+.fb-wrap:active { cursor: grabbing; }
 .fb-svg { width: 100%; height: 100%; display: block; }
+
+.fb-zoom {
+  position: absolute; left: 14px; bottom: 14px; display: flex; flex-direction: column;
+  background: #fff; border: 1px solid #DED3C2; border-radius: 9px; overflow: hidden;
+  box-shadow: 0 2px 6px -3px rgba(41,40,31,.3);
+}
+.fb-zoom button {
+  font: inherit; width: 32px; height: 30px; border: 0; border-bottom: 1px solid #EAE2D6;
+  background: #fff; cursor: pointer; color: #5C564B; font-size: 15px;
+}
+.fb-zoom button:last-child { border-bottom: 0; }
+.fb-zoom button:hover { background: #F4EFE6; color: #0F766E; }
 
 .fb-spine { stroke: #0B5D56; stroke-width: 3.5; stroke-linecap: round; }
 .fb-rib   { stroke: #C7A14A; stroke-width: 2.25; stroke-linecap: round; }

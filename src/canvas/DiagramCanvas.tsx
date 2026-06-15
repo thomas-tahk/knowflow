@@ -18,9 +18,11 @@ interface Props {
   editable?: boolean;
   onMove?: (blockId: string, position: { x: number; y: number }) => void;
   onResize?: (blockId: string, size: { w: number; h: number }) => void;
+  /** When this changes, the view snaps/zooms to that block (e.g. a freshly added one). */
+  focusId?: string | null;
 }
 
-function Inner({ doc, onSelect, editable = false, onMove, onResize }: Props) {
+function Inner({ doc, onSelect, editable = false, onMove, onResize, focusId }: Props) {
   const { fitView } = useReactFlow();
 
   const derived = useMemo(() => toReactFlow(doc, layoutDoc(doc)), [doc]);
@@ -47,6 +49,13 @@ function Inner({ doc, onSelect, editable = false, onMove, onResize }: Props) {
     return () => clearTimeout(t);
   }, [doc.id, fitView]);
 
+  // Snap-to-view: zoom/center onto a freshly added or targeted block.
+  useEffect(() => {
+    if (!focusId) return;
+    const t = setTimeout(() => fitView({ nodes: [{ id: focusId }], padding: 0.45, maxZoom: 1.25, duration: 400 }), 30);
+    return () => clearTimeout(t);
+  }, [focusId, fitView]);
+
   const handleDragStop = useCallback(
     (_: unknown, node: Node) => onMove?.(node.id, { x: node.position.x, y: node.position.y }),
     [onMove],
@@ -64,6 +73,10 @@ function Inner({ doc, onSelect, editable = false, onMove, onResize }: Props) {
       nodesConnectable={false}
       elementsSelectable={true}
       onNodeDragStop={editable ? handleDragStop : undefined}
+      snapToGrid={editable}
+      snapGrid={[16, 16]}
+      minZoom={0.2}
+      maxZoom={2.5}
       fitView
       onSelectionChange={({ nodes }) => onSelect?.(nodes[0]?.id ?? null)}
       proOptions={{ hideAttribution: true }}

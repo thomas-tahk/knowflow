@@ -1,30 +1,66 @@
 .editor { height: 100vh; display: flex; flex-direction: column; background: #F6F2EA; }
 
-.editor-bar {
-  display: flex; align-items: center; gap: 16px; padding: 10px 18px;
-  background: #FFFEFB; border-bottom: 1px solid #EAE2D6;
+/* ---- top bar ---- */
+.topbar {
+  display: flex; align-items: center; gap: 12px; padding: 0 16px; height: 56px; flex: none;
+  background: #FFFEFB; border-bottom: 1px solid #EAE2D6; z-index: 10;
 }
-.editor-brand { font-family: Georgia, serif; font-weight: 600; font-size: 18px; }
-.editor-brand b { color: #0F766E; }
-.editor-title-input {
-  font: inherit; font-size: 15px; font-weight: 600; color: #29281F;
-  border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 4px 8px; min-width: 180px;
+.brand { font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 20px; letter-spacing: -.01em; }
+.brand b { color: #0F766E; font-weight: 700; }
+.title-input {
+  font-family: "Fraunces", Georgia, serif; font-size: 16px; font-weight: 500; color: #29281F;
+  border: 1px solid transparent; background: transparent; border-radius: 7px; padding: 5px 9px; min-width: 220px;
 }
-.editor-title-input:hover { border-color: #EAE2D6; }
-.editor-title-input:focus { outline: none; border-color: #0F766E; background: #fff; }
-.editor-tools { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-.editor-menu, .editor-export {
+.title-input:hover { border-color: #EAE2D6; }
+.title-input:focus { outline: none; border-color: #0F766E; background: #fff; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.tbtn {
   font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
-  border: 1px solid #DED3C2; background: #fff; color: #5C564B; border-radius: 8px; padding: 6px 10px;
+  border: 1px solid #DED3C2; background: #fff; color: #5C564B; border-radius: 8px; padding: 7px 12px;
 }
-.editor-export:hover, .editor-menu:hover { border-color: #0F766E; color: #0F766E; }
-.editor-generate {
-  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
-  border: 1px solid #0F766E; background: #0F766E; color: #fff; border-radius: 8px; padding: 6px 12px;
+.tbtn:hover { border-color: #0F766E; color: #0F766E; }
+.tbtn.ghost { border-style: dashed; }
+.export-wrap { position: relative; }
+.export-menu {
+  position: absolute; right: 0; top: 40px; background: #fff; border: 1px solid #DED3C2;
+  border-radius: 9px; box-shadow: 0 14px 30px -16px rgba(41,40,31,.4); overflow: hidden; min-width: 156px; z-index: 30;
 }
-.editor-generate:hover { background: #0d655e; }
-.editor-save { font-size: 12.5px; color: #978D7C; min-width: 52px; text-align: right; }
-.editor-save-saved { color: #0F766E; }
+.export-menu button {
+  display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: 0; background: #fff; color: #5C564B; padding: 9px 12px;
+}
+.export-menu button + button { border-top: 1px solid #EAE2D6; }
+.export-menu button:hover { background: #F4EFE6; color: #0F766E; }
+.save { font-size: 12.5px; color: #978D7C; min-width: 56px; text-align: right; }
+.save-saved { color: #0F766E; }
 
-.editor-body { flex: 1; min-height: 0; display: flex; }
-.editor-canvas { flex: 1; min-width: 0; min-height: 0; }
+/* ---- stage: full-bleed canvas with floating panels ---- */
+.stage { position: relative; flex: 1; min-height: 0; }
+.canvas { position: absolute; inset: 0; }
+
+.panel {
+  position: absolute; top: 16px; z-index: 5; width: 248px; max-height: calc(100% - 32px);
+  display: flex; flex-direction: column; background: rgba(255,254,251,.96); backdrop-filter: blur(3px);
+  border: 1px solid #E4DBCD; border-radius: 14px; box-shadow: 0 20px 44px -24px rgba(41,40,31,.5);
+}
+.panel-left { left: 16px; width: 230px; }
+.panel-right { right: 16px; }
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 8px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: #978D7C; font-weight: 700;
+}
+.panel-collapse {
+  font: inherit; font-size: 13px; line-height: 1; cursor: pointer; border: 0; background: transparent;
+  color: #B6AC9B; padding: 2px 4px; border-radius: 6px;
+}
+.panel-collapse:hover { color: #0F766E; background: #EAF1EF; }
+.panel-body { padding: 4px 14px 14px; overflow-y: auto; display: flex; flex-direction: column; min-height: 0; flex: 1; }
+
+.panel-tab {
+  position: absolute; top: 16px; z-index: 5; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  background: rgba(255,254,251,.96); border: 1px solid #E4DBCD; color: #5C564B; border-radius: 10px; padding: 8px 12px;
+  box-shadow: 0 12px 30px -18px rgba(41,40,31,.5);
+}
+.panel-tab:hover { border-color: #0F766E; color: #0F766E; }
+.panel-tab-left { left: 16px; }
+.panel-tab-right { right: 16px; }

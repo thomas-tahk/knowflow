@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>knowflow — layout A/B/C comparison</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F2EA; --panel:#FFFEFB; --ink:#29281F; --ink2:#5C564B; --muted:#978D7C;
+    --line:#EAE2D6; --line2:#DED3C2; --accent:#0F766E; --accent-d:#0B5D56;
+    --step-bg:#E7EDF5; --step-bd:#9DB4D0; --step-ink:#2E435C;
+    --dec-bg:#F8EFD6; --dec-bd:#D9B968; --dec-ink:#6A4E14;
+    --out-bg:#E5F0E7; --out-bd:#92BC9B; --out-ink:#2F5236;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:"Hanken Grotesk",ui-sans-serif,system-ui,sans-serif;color:var(--ink);background:#E8E2D6;}
+
+  /* ---- comparison harness bar (not part of the app) ---- */
+  .lab{position:fixed;inset:0 0 auto 0;height:46px;z-index:100;display:flex;align-items:center;gap:14px;
+    padding:0 16px;background:#1f2a28;color:#EDE7DA;}
+  .lab b{font-family:"Fraunces",serif;font-weight:600;}
+  .lab .seg{display:flex;gap:4px;margin-left:6px;}
+  .lab button{font:inherit;font-size:13px;font-weight:600;cursor:pointer;border:1px solid #3c4a47;
+    background:#2a3633;color:#cfe3df;border-radius:7px;padding:5px 12px;}
+  .lab button.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .lab .hint{margin-left:auto;font-size:12px;color:#9fb3ae;}
+
+  /* ---- app frame ---- */
+  .app{position:fixed;inset:46px 0 0 0;display:grid;background:var(--paper);}
+
+  /* topbar */
+  .top{grid-area:top;display:flex;align-items:center;gap:14px;padding:0 16px;height:56px;
+    background:var(--panel);border-bottom:1px solid var(--line);}
+  .brand{font-family:"Fraunces",serif;font-weight:600;font-size:20px;letter-spacing:-.01em;}
+  .brand b{color:var(--accent);font-weight:700;}
+  .title{font-family:"Fraunces",serif;font-size:16px;font-weight:500;color:var(--ink);
+    border:1px solid transparent;border-radius:7px;padding:5px 9px;cursor:text;}
+  .title:hover{border-color:var(--line);}
+  .top .right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+  .btn{font:inherit;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--line2);
+    background:#fff;color:var(--ink2);border-radius:8px;padding:7px 12px;}
+  .btn:hover{border-color:var(--accent);color:var(--accent);}
+  .btn.ghost{border-style:dashed;}
+  .saved{font-size:12.5px;color:var(--accent);min-width:46px;text-align:right;}
+
+  /* sidebar: diagrams */
+  .side{grid-area:side;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0;}
+  .side h3,.tools h3{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0;}
+  .side-head{padding:16px 14px 10px;display:flex;flex-direction:column;gap:10px;}
+  .primary{font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;border-radius:9px;padding:9px 12px;
+    border:1px solid var(--accent);background:var(--accent);color:#fff;display:flex;gap:8px;align-items:center;justify-content:center;}
+  .primary.alt{background:#fff;color:var(--accent);}
+  .side-list{overflow-y:auto;padding:4px 8px 12px;display:flex;flex-direction:column;gap:2px;}
+  .doc{display:flex;flex-direction:column;gap:3px;padding:9px 10px;border-radius:9px;cursor:pointer;border:1px solid transparent;}
+  .doc:hover{background:#F7F2E9;}
+  .doc.on{background:#EAF1EF;border-color:#CADBD7;}
+  .doc .dt{font-weight:600;font-size:13.5px;}
+  .doc .dm{display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--muted);}
+  .chip{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:#EFE7D8;color:#7a6f5a;}
+
+  /* canvas */
+  .canvas{grid-area:canvas;position:relative;min-width:0;min-height:0;overflow:hidden;
+    background:radial-gradient(circle at 1px 1px,#D8E0E9 1px,transparent 0) 0 0/24px 24px,var(--paper);}
+  .canvas svg{width:100%;height:100%;display:block;}
+  .zoom{position:absolute;left:14px;bottom:14px;display:flex;flex-direction:column;gap:1px;background:#fff;
+    border:1px solid var(--line2);border-radius:9px;overflow:hidden;}
+  .zoom button{font:inherit;width:34px;height:30px;border:0;background:#fff;cursor:pointer;color:var(--ink2);border-bottom:1px solid var(--line);}
+  .zoom button:last-child{border-bottom:0;}
+
+  /* tools (add/edit) */
+  .tools{grid-area:tools;background:var(--panel);border-left:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0;padding:16px 14px;gap:14px;overflow-y:auto;}
+  .tabs{display:flex;gap:4px;}
+  .tabs button{flex:1;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;border:1px solid var(--line2);
+    background:#fff;color:var(--ink2);border-radius:8px;padding:7px;}
+  .tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .add-item{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;cursor:pointer;
+    border:1px solid var(--line2);background:#fff;border-radius:10px;padding:9px 11px;}
+  .add-item:hover{border-color:var(--accent);}
+  .swatch{width:22px;height:22px;border-radius:5px;border:1.5px solid;flex:none;margin-top:1px;}
+  .swatch.dec{transform:rotate(45deg);border-radius:3px;}
+  .swatch.out{border-radius:999px;}
+  .add-item .nm{font-weight:700;font-size:13px;}
+  .add-item .ds{font-size:11.5px;color:var(--muted);line-height:1.3;}
+  .field{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:600;color:var(--ink2);}
+  .field textarea,.field select{font:inherit;font-weight:500;font-size:14px;color:var(--ink);
+    border:1px solid var(--line2);border-radius:8px;padding:8px 10px;background:#fff;resize:vertical;}
+  .danger{margin-top:auto;font:inherit;font-size:13px;font-weight:600;cursor:pointer;
+    border:1px solid #D9A18F;color:#8A4632;background:#F6E7E2;border-radius:8px;padding:8px 12px;}
+  .muted{color:var(--muted);font-size:13px;}
+
+  /* ============ Layout A: Library | Canvas | context Tools ============ */
+  body[data-layout="a"] .app{grid-template-columns:230px 1fr 268px;grid-template-rows:56px 1fr;
+    grid-template-areas:"top top top" "side canvas tools";}
+  body[data-layout="a"] .tabs{display:none;}
+
+  /* ============ Layout B: Library | Canvas | tabbed Tools ============ */
+  body[data-layout="b"] .app{grid-template-columns:230px 1fr 268px;grid-template-rows:56px 1fr;
+    grid-template-areas:"top top top" "side canvas tools";}
+
+  /* ============ Layout C: full-bleed canvas + floating panels ============ */
+  body[data-layout="c"] .app{grid-template-columns:1fr;grid-template-rows:56px 1fr;
+    grid-template-areas:"top" "canvas";}
+  body[data-layout="c"] .canvas{grid-area:canvas;}
+  body[data-layout="c"] .side{position:absolute;top:72px;left:16px;width:212px;max-height:calc(100% - 96px);
+    border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 40px -22px rgba(41,40,31,.5);z-index:5;}
+  body[data-layout="c"] .tools{position:absolute;top:72px;right:16px;width:256px;max-height:calc(100% - 96px);
+    border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 40px -22px rgba(41,40,31,.5);z-index:5;}
+  body[data-layout="c"] .tabs{display:none;}
+  body[data-layout="c"] .top{grid-area:top;}
+
+  /* selection-driven panel visibility (A & C use context; B uses tabs) */
+  .pane-add,.pane-edit{display:flex;flex-direction:column;gap:12px;min-height:0;}
+  body:not(.sel) .pane-edit{display:none;}
+  body:not(.sel) .pane-add{display:flex;}
+  body.sel .pane-add{display:none;}
+  body.sel .pane-edit{display:flex;}
+  /* layout B: tabs override context; both controllable */
+  body[data-layout="b"][data-tab="add"] .pane-add{display:flex;}
+  body[data-layout="b"][data-tab="add"] .pane-edit{display:none;}
+  body[data-layout="b"][data-tab="edit"] .pane-add{display:none;}
+  body[data-layout="b"][data-tab="edit"] .pane-edit{display:flex;}
+  .ctx-label{font-size:11px;color:var(--muted);}
+  body[data-layout="b"] .ctx-label{display:none;}
+</style>
+</head>
+<body data-layout="a" data-tab="add">
+
+  <div class="lab">
+    <b>knowflow</b> · layout comparison
+    <span class="seg">
+      <button data-set="a" class="on">A · context tools</button>
+      <button data-set="b">B · tabbed tools</button>
+      <button data-set="c">C · floating</button>
+    </span>
+    <span class="hint" id="hint">Tip: click a node in the canvas to see the Edit panel · click empty canvas to deselect</span>
+  </div>
+
+  <div class="app">
+    <header class="top">
+      <span class="brand">know<b>flow</b></span>
+      <span class="title" contenteditable="true">Handling disabled accounts</span>
+      <div class="right">
+        <button class="btn ghost" title="Re-tidy positions, keep your content">Auto-arrange</button>
+        <div style="position:relative" id="exportWrap">
+          <button class="btn" id="exportBtn">Export ▾</button>
+          <div id="exportMenu" style="display:none;position:absolute;right:0;top:38px;background:#fff;border:1px solid var(--line2);border-radius:9px;box-shadow:0 14px 30px -16px rgba(41,40,31,.4);overflow:hidden;min-width:150px;z-index:20;">
+            <button class="btn" style="border:0;border-radius:0;width:100%;text-align:left">Download PNG</button>
+            <button class="btn" style="border:0;border-radius:0;width:100%;text-align:left;border-top:1px solid var(--line)">Download PDF</button>
+          </div>
+        </div>
+        <span class="saved">Saved ✓</span>
+      </div>
+    </header>
+
+    <!-- DIAGRAMS sidebar -->
+    <nav class="side">
+      <div class="side-head">
+        <h3>Diagrams</h3>
+        <button class="primary alt">+ New diagram</button>
+        <button class="primary">✨ Generate with AI</button>
+      </div>
+      <div class="side-list">
+        <div class="doc on"><span class="dt">Handling disabled accounts</span><span class="dm"><span class="chip">Flowchart</span> just now</span></div>
+        <div class="doc"><span class="dt">Account stays disabled</span><span class="dm"><span class="chip">Fishbone</span> 2h ago</span></div>
+        <div class="doc"><span class="dt">Reset a password</span><span class="dm"><span class="chip">Step list</span> yesterday</span></div>
+        <div class="doc"><span class="dt">Which account action?</span><span class="dm"><span class="chip">Decision tree</span> Mon</span></div>
+      </div>
+    </nav>
+
+    <!-- CANVAS -->
+    <div class="canvas" id="canvas">
+      <svg viewBox="0 0 560 420" id="diagram">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L8,3 L0,6 z" fill="#B6AC9B"/>
+          </marker>
+        </defs>
+        <!-- edges -->
+        <g stroke="#B6AC9B" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+          <path d="M280,64 L280,96"/>
+          <path d="M280,156 L280,188" />
+          <path d="M232,126 C150,126 120,126 120,188"/>
+          <path d="M328,126 C410,126 440,126 440,188"/>
+        </g>
+        <g font-family="Hanken Grotesk" font-size="11" fill="#7a6f5a">
+          <text x="135" y="160">Yes</text><text x="420" y="160">No</text>
+        </g>
+        <!-- nodes -->
+        <g class="n" data-id="a"><rect x="190" y="28" width="180" height="40" rx="11" fill="var(--step-bg)" stroke="var(--step-bd)" stroke-width="1.5"/>
+          <text x="280" y="52" text-anchor="middle" font-family="Hanken Grotesk" font-weight="600" font-size="12.5" fill="var(--step-ink)">Ticket arrives</text></g>
+        <g class="n" data-id="b"><rect x="240" y="86" width="80" height="80" rx="12" fill="var(--dec-bg)" stroke="var(--dec-bd)" stroke-width="1.5" transform="rotate(45 280 126)"/>
+          <text x="280" y="130" text-anchor="middle" font-family="Hanken Grotesk" font-weight="600" font-size="12" fill="var(--dec-ink)">Locked?</text></g>
+        <g class="n" data-id="c"><rect x="40" y="188" width="160" height="46" rx="23" fill="var(--out-bg)" stroke="var(--out-bd)" stroke-width="1.5"/>
+          <text x="120" y="216" text-anchor="middle" font-family="Hanken Grotesk" font-weight="600" font-size="12.5" fill="var(--out-ink)">Unlock account</text></g>
+        <g class="n" data-id="d"><rect x="360" y="188" width="160" height="46" rx="11" fill="var(--step-bg)" stroke="var(--step-bd)" stroke-width="1.5"/>
+          <text x="440" y="216" text-anchor="middle" font-family="Hanken Grotesk" font-weight="600" font-size="12.5" fill="var(--step-ink)">Reset password</text></g>
+      </svg>
+      <div class="zoom"><button>+</button><button>−</button><button title="Fit">⤢</button></div>
+    </div>
+
+    <!-- TOOLS -->
+    <aside class="tools">
+      <div class="tabs">
+        <button data-tab="add" class="on">Add</button>
+        <button data-tab="edit">Edit</button>
+      </div>
+
+      <div class="pane-add">
+        <h3>Add a block</h3>
+        <span class="ctx-label">Nothing selected — pick a block to add</span>
+        <button class="add-item"><span class="swatch" style="background:var(--step-bg);border-color:var(--step-bd)"></span>
+          <span><span class="nm">Step</span><br><span class="ds">An action to take</span></span></button>
+        <button class="add-item"><span class="swatch dec" style="background:var(--dec-bg);border-color:var(--dec-bd)"></span>
+          <span><span class="nm">Decision</span><br><span class="ds">A yes/no branch point</span></span></button>
+        <button class="add-item"><span class="swatch out" style="background:var(--out-bg);border-color:var(--out-bd)"></span>
+          <span><span class="nm">Outcome</span><br><span class="ds">A result or end state</span></span></button>
+      </div>
+
+      <div class="pane-edit">
+        <h3>Edit block</h3>
+        <span class="ctx-label">Editing the selected block</span>
+        <label class="field"><span>Text</span><textarea rows="3">Account locked?</textarea></label>
+        <label class="field"><span>Type</span><select><option>decision</option><option>step</option><option>outcome</option></select></label>
+        <button class="danger">Delete block</button>
+      </div>
+    </aside>
+  </div>
+
+<script>
+  const body = document.body;
+  // layout switch
+  document.querySelectorAll('.lab [data-set]').forEach(b=>{
+    b.onclick=()=>{
+      document.querySelectorAll('.lab [data-set]').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      body.dataset.layout=b.dataset.set;
+    };
+  });
+  // tabs (layout B)
+  document.querySelectorAll('.tabs [data-tab]').forEach(b=>{
+    b.onclick=()=>{
+      document.querySelectorAll('.tabs [data-tab]').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      body.dataset.tab=b.dataset.tab;
+    };
+  });
+  // selection: clicking a node selects (shows Edit in A/C; in B just switch tab)
+  document.querySelectorAll('#diagram .n').forEach(n=>{
+    n.style.cursor='pointer';
+    n.onclick=(e)=>{
+      e.stopPropagation();
+      document.querySelectorAll('#diagram .n rect').forEach(r=>r.removeAttribute('data-sel'));
+      body.classList.add('sel');
+      body.dataset.tab='edit';
+      document.querySelectorAll('.tabs [data-tab]').forEach(x=>x.classList.toggle('on',x.dataset.tab==='edit'));
+      const r=n.querySelector('rect'); r.setAttribute('stroke','#0F766E'); r.setAttribute('stroke-width','2.4');
+    };
+  });
+  document.getElementById('canvas').onclick=()=>{
+    body.classList.remove('sel'); body.dataset.tab='add';
+    document.querySelectorAll('.tabs [data-tab]').forEach(x=>x.classList.toggle('on',x.dataset.tab==='add'));
+    document.querySelectorAll('#diagram .n rect').forEach(r=>{ /* reset strokes by type is overkill for a mock */ });
+  };
+  // export menu
+  const ew=document.getElementById('exportWrap'), em=document.getElementById('exportMenu');
+  document.getElementById('exportBtn').onclick=(e)=>{e.stopPropagation();em.style.display=em.style.display==='none'?'block':'none';};
+  document.addEventListener('click',(e)=>{ if(!ew.contains(e.target)) em.style.display='none'; });
+</script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+.dp { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+
+.dp-primary {
+  font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer;
+  border: 1px solid #0F766E; background: #0F766E; color: #fff; border-radius: 9px; padding: 9px 12px;
+}
+.dp-primary:hover { background: #0d655e; }
+
+.dp-new {
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  border: 1px solid #DED3C2; background: #fff; color: #5C564B; border-radius: 9px; padding: 8px 10px;
+}
+.dp-new:hover { border-color: #0F766E; color: #0F766E; }
+
+.dp-list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.dp-empty { font-size: 12.5px; color: #978D7C; margin: 6px 2px; }
+
+.dp-doc {
+  display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 10px; border-radius: 9px;
+  cursor: pointer; border: 1px solid transparent;
+}
+.dp-doc:hover { background: #F7F2E9; }
+.dp-doc.on { background: #EAF1EF; border-color: #CADBD7; }
+.dp-doc-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.dp-doc-title { font-weight: 600; font-size: 13.5px; color: #29281F; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dp-chip { font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: #EFE7D8; color: #7a6f5a; }
+.dp-del {
+  flex: none; font: inherit; font-size: 16px; line-height: 1; cursor: pointer; color: #B6AC9B;
+  border: 0; background: transparent; border-radius: 6px; padding: 2px 6px;
+}
+.dp-doc:hover .dp-del { color: #8A4632; }
+.dp-del:hover { background: #F6E7E2; }

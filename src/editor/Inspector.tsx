@@ -1,5 +1,6 @@
 import type { KnowflowDoc, BlockType } from '../core/types';
 import { getPreset } from '../core/presets';
+import { BLOCK_META } from './blockMeta';
 import './Inspector.css';
 
 interface Props {
@@ -13,37 +14,24 @@ interface Props {
 
 export function Inspector({ doc, selectedId, onChangeText, onChangeType, onRecategorize, onDelete }: Props) {
   const block = doc.blocks.find(b => b.id === selectedId);
-
-  if (!block) {
-    return (
-      <aside className="inspector">
-        <p className="inspector-empty">Select a block to edit it.</p>
-      </aside>
-    );
-  }
+  if (!block) return <p className="inspector-empty">Select a block to edit it.</p>;
 
   const typeOptions = getPreset(doc.preset).blockTypes.filter(t => t !== 'spine');
   const categories = doc.blocks.filter(b => b.type === 'category');
   const isLoneSpine = block.type === 'spine' && doc.blocks.filter(b => b.type === 'spine').length === 1;
 
   return (
-    <aside className="inspector">
-      <h2 className="inspector-title">Edit</h2>
-
+    <div className="inspector">
       <label className="inspector-field">
         <span>Text</span>
-        <textarea
-          value={block.text}
-          rows={3}
-          onChange={e => onChangeText(block.id, e.target.value)}
-        />
+        <textarea value={block.text} rows={3} onChange={e => onChangeText(block.id, e.target.value)} />
       </label>
 
       {block.type !== 'spine' && (
         <label className="inspector-field">
           <span>Type</span>
           <select value={block.type} onChange={e => onChangeType(block.id, e.target.value as BlockType)}>
-            {typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+            {typeOptions.map(t => <option key={t} value={t}>{BLOCK_META[t].label}</option>)}
           </select>
         </label>
       )}
@@ -65,6 +53,6 @@ export function Inspector({ doc, selectedId, onChangeText, onChangeType, onRecat
       >
         Delete block
       </button>
-    </aside>
+    </div>
   );
 }

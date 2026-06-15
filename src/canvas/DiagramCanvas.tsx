@@ -8,9 +8,11 @@ import type { KnowflowDoc } from '../core/types';
 import { layoutDoc } from '../layout';
 import { toReactFlow, type KnowflowNodeData } from './adapter';
 import { KnowflowNode } from './KnowflowNode';
+import { GraphEdge } from './GraphEdge';
 
 // Must be defined outside the component (React Flow requirement).
 const nodeTypes = { knowflow: KnowflowNode };
+const edgeTypes = { graph: GraphEdge };
 
 interface Props {
   doc: KnowflowDoc;
@@ -65,8 +67,12 @@ function Inner(props: Props) {
   );
 
   const edges: Edge[] = useMemo(
-    () => derived.edges.map(e => ({ ...e, selected: e.id === selectedEdgeId })),
-    [derived.edges, selectedEdgeId],
+    () => derived.edges.map(e => ({
+      ...e,
+      selected: e.id === selectedEdgeId,
+      data: { ...(e.data ?? {}), onDelete: onDeleteConnection },
+    })),
+    [derived.edges, selectedEdgeId, onDeleteConnection],
   );
 
   // Click-to-connect: first click picks the source, second click links to the target.
@@ -89,6 +95,7 @@ function Inner(props: Props) {
       nodes={renderNodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       className={connectMode ? 'kf-connecting' : undefined}
       onNodesChange={onNodesChange}
       nodesDraggable={editable && !connectMode}

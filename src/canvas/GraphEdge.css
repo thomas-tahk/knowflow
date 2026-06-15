@@ -1,0 +1,14 @@
+.ge-tools {
+  position: absolute; display: flex; align-items: center; gap: 5px;
+  pointer-events: all; font-size: 12px;
+}
+.ge-label {
+  background: #FBF8F2; border: 1px solid #E4DBCD; border-radius: 6px; padding: 1px 7px;
+  color: #5C564B; font-weight: 600; white-space: nowrap;
+}
+.ge-del {
+  width: 19px; height: 19px; line-height: 1; border-radius: 50%; cursor: pointer; font-size: 14px;
+  border: 1px solid #D9A18F; background: #fff; color: #8A4632;
+  display: flex; align-items: center; justify-content: center;
+}
+.ge-del:hover { background: #F6E7E2; }

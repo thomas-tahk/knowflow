@@ -19,6 +19,7 @@ import { GeneratePanel } from './GeneratePanel';
 import { CanvasCaption } from './CanvasCaption';
 import { ValidationHints } from './ValidationHints';
 import { useAutosave } from './useAutosave';
+import { useDocHistory } from './useDocHistory';
 import './EditorScreen.css';
 
 const store = new DocumentStore(localStorage);
@@ -28,7 +29,7 @@ function seed(preset: Preset): KnowflowDoc {
 }
 
 export function EditorScreen() {
-  const [doc, setDoc] = useState<KnowflowDoc>(() => seed('flowchart'));
+  const { doc, setDoc, resetDoc, undo, redo, canUndo, canRedo } = useDocHistory(seed('flowchart'));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -45,7 +46,7 @@ export function EditorScreen() {
   const errors = useMemo(() => getPreset(doc.preset).validate(doc), [doc]);
 
   const loadDoc = (next: KnowflowDoc) => {
-    setDoc(next); setSelectedId(null); setSelectedEdgeId(null); setFocusId(null); setConnectMode(false);
+    resetDoc(next); setSelectedId(null); setSelectedEdgeId(null); setFocusId(null); setConnectMode(false);
   };
   const newBlank = (preset: Preset) => loadDoc(createDoc(preset, 'Untitled'));
   const openSaved = (id: string) => { const d = store.load(id); if (d) loadDoc(d); };
@@ -61,17 +62,19 @@ export function EditorScreen() {
     setDoc(clearDoc(doc)); setSelectedId(null); setSelectedEdgeId(null);
   };
 
-  // Keyboard: C toggles connect mode (graph presets), Esc exits.
+  // Keyboard: Cmd/Ctrl+Z undo, +Shift redo; C toggles connect mode; Esc exits.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement as HTMLElement | null;
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return; // let fields handle their own
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
       if (e.key === 'Escape') setConnectMode(false);
       else if ((e.key === 'c' || e.key === 'C') && connectable) setConnectMode(m => !m);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [connectable]);
+  }, [connectable, undo, redo]);
 
   const doExport = async (kind: 'png' | 'pdf') => {
     setExportOpen(false);
@@ -116,6 +119,8 @@ export function EditorScreen() {
         <span className="preset-tag">{getPreset(doc.preset).name}</span>
 
         <div className="topbar-right">
+          <button className="tbtn icon" onClick={undo} disabled={!canUndo} title="Undo (⌘/Ctrl+Z)">↶</button>
+          <button className="tbtn icon" onClick={redo} disabled={!canRedo} title="Redo (⌘/Ctrl+Shift+Z)">↷</button>
           {connectable && (
             <button className={`tbtn ${connectMode ? 'active' : ''}`} onClick={() => setConnectMode(m => !m)}
               title="Connect blocks: click a start, then an end. Shortcut: C">

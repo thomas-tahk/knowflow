@@ -27,6 +27,9 @@
 .tbtn.danger { color: #8A4632; }
 .tbtn.danger:hover { border-color: #C0573E; color: #C0573E; background: #F9EEEA; }
 .tbtn.active { background: #0F766E; border-color: #0F766E; color: #fff; }
+.tbtn.icon { padding: 6px 9px; font-size: 15px; line-height: 1; }
+.tbtn:disabled { opacity: .4; cursor: not-allowed; }
+.tbtn:disabled:hover { border-color: #DED3C2; color: #5C564B; background: #fff; }
 
 .connect-banner {
   position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 6;

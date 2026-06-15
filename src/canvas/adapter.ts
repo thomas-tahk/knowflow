@@ -30,11 +30,10 @@ function nodesFor(doc: KnowflowDoc, positions: Positions): Node<KnowflowNodeData
 }
 
 function graphEdges(doc: KnowflowDoc): Edge[] {
-  // Real connections: selectable + deletable so the user can edit/remove them.
+  // Real connections: floating 'graph' edges (route to nearest borders), selectable + deletable.
   return doc.connections.map(c => ({
     id: c.id, source: c.from, target: c.to, label: c.label,
-    type: 'smoothstep', sourceHandle: 'b', targetHandle: 't', markerEnd: MARKER,
-    selectable: true, deletable: true,
+    type: 'graph', markerEnd: MARKER, selectable: true, deletable: true,
   }));
 }
 

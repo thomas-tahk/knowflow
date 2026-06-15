@@ -20,6 +20,8 @@
 }
 .tbtn:hover { border-color: #0F766E; color: #0F766E; }
 .tbtn.ghost { border-style: dashed; }
+.tbtn.danger { color: #8A4632; }
+.tbtn.danger:hover { border-color: #C0573E; color: #C0573E; background: #F9EEEA; }
 .export-wrap { position: relative; }
 .export-menu {
   position: absolute; right: 0; top: 40px; background: #fff; border: 1px solid #DED3C2;

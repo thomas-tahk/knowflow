@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import {
-  ReactFlow, ReactFlowProvider, Background, Controls, useReactFlow, useNodesState,
-  type Node, type Edge,
+  ReactFlow, ReactFlowProvider, Background, Controls, ConnectionMode, useReactFlow, useNodesState,
+  type Node, type Edge, type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { KnowflowDoc } from '../core/types';
@@ -14,20 +14,25 @@ const nodeTypes = { knowflow: KnowflowNode };
 
 interface Props {
   doc: KnowflowDoc;
-  onSelect?: (blockId: string | null) => void;
   editable?: boolean;
+  connectable?: boolean;
+  focusId?: string | null;
+  selectedEdgeId?: string | null;
+  onSelect?: (blockId: string | null) => void;
+  onSelectEdge?: (edgeId: string | null) => void;
   onMove?: (blockId: string, position: { x: number; y: number }) => void;
   onResize?: (blockId: string, size: { w: number; h: number }) => void;
-  /** When this changes, the view snaps/zooms to that block (e.g. a freshly added one). */
-  focusId?: string | null;
+  onConnect?: (from: string, to: string) => void;
+  onDeleteConnection?: (edgeId: string) => void;
 }
 
-function Inner({ doc, onSelect, editable = false, onMove, onResize, focusId }: Props) {
+function Inner(props: Props) {
+  const { doc, editable = false, connectable = false, focusId, selectedEdgeId,
+    onSelect, onSelectEdge, onMove, onResize, onConnect, onDeleteConnection } = props;
   const { fitView } = useReactFlow();
 
   const derived = useMemo(() => toReactFlow(doc, layoutDoc(doc)), [doc]);
 
-  // In editable mode, augment each node with resize handles + a per-node commit callback.
   const derivedNodes = useMemo<Node<KnowflowNodeData>[]>(() => {
     if (!editable) return derived.nodes;
     return derived.nodes.map(n => ({
@@ -36,20 +41,15 @@ function Inner({ doc, onSelect, editable = false, onMove, onResize, focusId }: P
     }));
   }, [derived.nodes, editable, onResize]);
 
-  // React Flow holds transient interaction state; the doc stays the source of truth.
   const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes);
-  // Re-sync only when the document itself changes (not on every render / callback churn),
-  // so an in-progress drag isn't reset mid-gesture. derivedNodes is read fresh inside.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setNodes(derivedNodes); }, [doc, setNodes]);
 
-  // Fit when switching documents — not on every keystroke-level edit.
   useEffect(() => {
     const t = setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 0);
     return () => clearTimeout(t);
   }, [doc.id, fitView]);
 
-  // Snap-to-view: zoom/center onto a freshly added or targeted block.
   useEffect(() => {
     if (!focusId) return;
     const t = setTimeout(() => fitView({ nodes: [{ id: focusId }], padding: 0.45, maxZoom: 1.25, duration: 400 }), 30);
@@ -61,7 +61,10 @@ function Inner({ doc, onSelect, editable = false, onMove, onResize, focusId }: P
     [onMove],
   );
 
-  const edges: Edge[] = derived.edges;
+  const edges: Edge[] = useMemo(
+    () => derived.edges.map(e => ({ ...e, selected: e.id === selectedEdgeId })),
+    [derived.edges, selectedEdgeId],
+  );
 
   return (
     <ReactFlow
@@ -70,15 +73,18 @@ function Inner({ doc, onSelect, editable = false, onMove, onResize, focusId }: P
       nodeTypes={nodeTypes}
       onNodesChange={onNodesChange}
       nodesDraggable={editable}
-      nodesConnectable={false}
+      nodesConnectable={editable && connectable}
       elementsSelectable={true}
+      connectionMode={ConnectionMode.Loose}
+      onConnect={(c: Connection) => { if (c.source && c.target && c.source !== c.target) onConnect?.(c.source, c.target); }}
+      onEdgesDelete={(eds) => eds.forEach(e => onDeleteConnection?.(e.id))}
       onNodeDragStop={editable ? handleDragStop : undefined}
+      onSelectionChange={({ nodes: ns, edges: es }) => { onSelect?.(ns[0]?.id ?? null); onSelectEdge?.(es[0]?.id ?? null); }}
       snapToGrid={editable}
       snapGrid={[16, 16]}
       minZoom={0.2}
       maxZoom={2.5}
       fitView
-      onSelectionChange={({ nodes }) => onSelect?.(nodes[0]?.id ?? null)}
       proOptions={{ hideAttribution: true }}
     >
       <Background gap={24} size={1.1} color="#D4DDE7" />

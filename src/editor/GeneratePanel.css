@@ -9,6 +9,7 @@
   box-shadow: 0 24px 60px -24px rgba(41,40,31,.45);
 }
 .gen-title { margin: 0; font-size: 18px; color: #29281F; }
+.gen-sub { margin: -6px 0 2px; font-size: 12.5px; color: #978D7C; }
 .gen-field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; font-weight: 600; color: #5C564B; }
 .gen-field input, .gen-field select, .gen-field textarea {
   font: inherit; font-weight: 500; font-size: 14px; color: #29281F;

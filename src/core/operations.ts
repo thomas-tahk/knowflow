@@ -55,6 +55,16 @@ export function retargetConnection(doc: KnowflowDoc, connectionId: string, newTo
   return touch({ ...doc, connections: doc.connections.map(c => (c.id === connectionId ? { ...c, to: newTo } : c)) }, clock);
 }
 
+export function setConnectionLabel(doc: KnowflowDoc, connectionId: string, label: string, clock: Clock = systemClock): KnowflowDoc {
+  return touch({ ...doc, connections: doc.connections.map(c => (c.id === connectionId ? { ...c, label } : c)) }, clock);
+}
+
+/** Empty the diagram. Keeps a fishbone's single effect/spine so it stays valid. */
+export function clearDoc(doc: KnowflowDoc, clock: Clock = systemClock): KnowflowDoc {
+  const blocks = doc.preset === 'fishbone' ? doc.blocks.filter(b => b.type === 'spine').slice(0, 1) : [];
+  return touch({ ...doc, blocks, connections: [] }, clock);
+}
+
 export function recategorizeCause(doc: KnowflowDoc, blockId: string, categoryId: string, clock: Clock = systemClock): KnowflowDoc {
   return touch({ ...doc, blocks: doc.blocks.map(b => (b.id === blockId ? { ...b, categoryId } : b)) }, clock);
 }

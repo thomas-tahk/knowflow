@@ -23,25 +23,30 @@ function nodesFor(doc: KnowflowDoc, positions: Positions): Node<KnowflowNodeData
       // width/height are node-level so React Flow's NodeResizer can drive them live.
       width,
       height,
+      deletable: false, // nodes are deleted via the inspector, not the keyboard
       data: { blockType: b.type, text: b.text },
     };
   });
 }
 
 function graphEdges(doc: KnowflowDoc): Edge[] {
+  // Real connections: selectable + deletable so the user can edit/remove them.
   return doc.connections.map(c => ({
     id: c.id, source: c.from, target: c.to, label: c.label,
     type: 'smoothstep', sourceHandle: 'b', targetHandle: 't', markerEnd: MARKER,
+    selectable: true, deletable: true,
   }));
 }
 
 function sequenceEdges(doc: KnowflowDoc): Edge[] {
+  // Step-list order is implicit; these are derived, so they can't be edited individually.
   const edges: Edge[] = [];
   for (let i = 0; i < doc.blocks.length - 1; i++) {
     const from = doc.blocks[i], to = doc.blocks[i + 1];
     edges.push({
       id: `seq-${from.id}-${to.id}`, source: from.id, target: to.id,
       type: 'smoothstep', sourceHandle: 'b', targetHandle: 't', markerEnd: MARKER,
+      selectable: false, deletable: false, focusable: false,
     });
   }
   return edges;

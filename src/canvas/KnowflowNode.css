@@ -13,8 +13,10 @@
 .kf-diamond .kf-label { transform: rotate(-45deg); max-width: 120px; }
 .kf-label { line-height: 1.25; overflow-wrap: anywhere; }
 .kf-selected { outline: 3px solid #0F766E; outline-offset: 3px; box-shadow: 0 0 0 6px rgba(15,118,110,.18); }
-/* React Flow handles: keep them subtle for a read-only diagram */
-.kf-node .react-flow__handle { width: 6px; height: 6px; background: #C6BCAB; border: none; opacity: 0; }
+/* React Flow handles: hidden by default (read-only); visible + grabbable when editing */
+.kf-node .react-flow__handle { width: 9px; height: 9px; background: #0F766E; border: 1.5px solid #fff; opacity: 0; transition: opacity .12s; }
+.kf-editable:hover .react-flow__handle,
+.kf-editable.kf-selected .react-flow__handle { opacity: 1; }
 /* Resize affordances (editable mode only) */
 .kf-resize-line { border-color: #0F766E !important; }
 .kf-resize-handle { background: #0F766E !important; border: 1.5px solid #fff !important; border-radius: 2px; width: 8px; height: 8px; }

@@ -12,7 +12,7 @@ export function KnowflowNode({ data, selected }: NodeProps<KNode>) {
   } as React.CSSProperties;
 
   return (
-    <div className={`kf-node kf-${style.shape} ${selected ? 'kf-selected' : ''}`} style={cssVars}>
+    <div className={`kf-node kf-${style.shape} ${selected ? 'kf-selected' : ''} ${data.editable ? 'kf-editable' : ''}`} style={cssVars}>
       {data.editable && (
         <NodeResizer
           minWidth={90}

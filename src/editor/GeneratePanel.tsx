@@ -65,6 +65,7 @@ export function GeneratePanel({ defaultPreset, onClose, onGenerated }: Props) {
     <div className="gen-overlay" onClick={onClose}>
       <div className="gen-panel" onClick={e => e.stopPropagation()}>
         <h2 className="gen-title">Generate a diagram with AI</h2>
+        <p className="gen-sub">Use a prompt, an image, or both — whatever you have.</p>
 
         <label className="gen-field">
           <span>Diagram type</span>
@@ -79,13 +80,13 @@ export function GeneratePanel({ defaultPreset, onClose, onGenerated }: Props) {
         </label>
 
         <label className="gen-field">
-          <span>Paste your notes or KB text</span>
+          <span>Describe what you want, or paste notes / KB text</span>
           <textarea rows={7} value={text} onChange={e => setText(e.target.value)}
-            placeholder="Paste the process, notes, or steps here…" />
+            placeholder={"e.g. “A flowchart for unlocking a disabled AD account: check if it's locked → unlock; otherwise reset the password, then re-enable in AD.”\n\nOr just paste raw notes and let AI structure them."} />
         </label>
 
         <label className="gen-field">
-          <span>Or add an image (photo of text / a sketch)</span>
+          <span>Add an image too (optional) — a photo of text or a sketch</span>
           <input type="file" accept="image/png,image/jpeg,image/gif,image/webp"
             onChange={e => pickImage(e.target.files?.[0])} />
           {imageName && <span className="gen-imagename">{imageName}</span>}

@@ -32,10 +32,14 @@
 .tbtn:disabled:hover { border-color: #DED3C2; color: #5C564B; background: #fff; }
 
 .connect-banner {
-  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 6;
+  position: absolute; bottom: 62px; left: 50%; transform: translateX(-50%); z-index: 6;
   font-size: 12.5px; color: #0B5D56; background: #E4EFEC; border: 1px solid #9EC7C0;
   border-radius: 999px; padding: 7px 14px; box-shadow: 0 8px 22px -14px rgba(41,40,31,.4);
 }
+
+/* Keep the React Flow zoom/fit controls a compact horizontal bar at bottom-center,
+   clear of the floating side panels. */
+.react-flow__controls { flex-direction: row !important; box-shadow: 0 8px 22px -14px rgba(41,40,31,.4); border-radius: 9px; overflow: hidden; }
 .export-wrap { position: relative; }
 .export-menu {
   position: absolute; right: 0; top: 40px; background: #fff; border: 1px solid #DED3C2;

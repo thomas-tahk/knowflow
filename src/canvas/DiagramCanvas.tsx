@@ -116,7 +116,7 @@ function Inner(props: Props) {
       proOptions={{ hideAttribution: true }}
     >
       <Background gap={24} size={1.1} color="#D4DDE7" />
-      <Controls showInteractive={false} />
+      <Controls position="bottom-center" showInteractive={false} />
     </ReactFlow>
   );
 }

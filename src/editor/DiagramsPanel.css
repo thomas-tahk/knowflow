@@ -1,4 +1,4 @@
-.dp { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.dp { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1; }
 
 .dp-primary {
   font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer;
@@ -12,7 +12,8 @@
 }
 .dp-new:hover { border-color: #0F766E; color: #0F766E; }
 
-.dp-list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+/* Only the list scrolls; Generate / New stay pinned above it. */
+.dp-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
 .dp-empty { font-size: 12.5px; color: #978D7C; margin: 6px 2px; }
 
 .dp-doc {

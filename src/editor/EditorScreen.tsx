@@ -16,7 +16,6 @@ import { Inspector } from './Inspector';
 import { EdgeInspector } from './EdgeInspector';
 import { DiagramsPanel } from './DiagramsPanel';
 import { GeneratePanel } from './GeneratePanel';
-import { CanvasCaption } from './CanvasCaption';
 import { ValidationHints } from './ValidationHints';
 import { useAutosave } from './useAutosave';
 import { useDocHistory } from './useDocHistory';
@@ -80,7 +79,7 @@ export function EditorScreen() {
     setExportOpen(false);
     if (!canvasRef.current) return;
     const { exportPng, exportPdf } = await import('./exporters');
-    (kind === 'png' ? exportPng : exportPdf)(canvasRef.current, doc.title);
+    (kind === 'png' ? exportPng : exportPdf)(canvasRef.current, doc.title, doc.description ?? '');
   };
 
   const handleAdd = (type: BlockType) => {
@@ -115,8 +114,17 @@ export function EditorScreen() {
   return (
     <div className="editor">
       <header className="topbar">
-        <span className="brand">know<b>flow</b></span>
-        <span className="preset-tag">{getPreset(doc.preset).name}</span>
+        <div className="topbar-left">
+          <span className="brand">know<b>flow</b></span>
+          <span className="preset-tag">{getPreset(doc.preset).name}</span>
+        </div>
+
+        <div className="topbar-center">
+          <input className="doc-title" value={doc.title} placeholder="Untitled diagram"
+            aria-label="Diagram title" onChange={e => setDoc(renameDoc(doc, e.target.value))} />
+          <input className="doc-desc" value={doc.description ?? ''} placeholder="Add a description — what is this & when do you use it?"
+            aria-label="Diagram description" onChange={e => setDoc(setDescription(doc, e.target.value))} />
+        </div>
 
         <div className="topbar-right">
           <button className="tbtn icon" onClick={undo} disabled={!canUndo} title="Undo (⌘/Ctrl+Z)">↶</button>
@@ -146,13 +154,6 @@ export function EditorScreen() {
 
       <div className="stage">
         <div className="canvas" ref={canvasRef}>
-          <CanvasCaption
-            key={doc.id}
-            title={doc.title}
-            description={doc.description ?? ''}
-            onTitle={t => setDoc(renameDoc(doc, t))}
-            onDescription={d => setDoc(setDescription(doc, d))}
-          />
           {isFishbone ? (
             <FishboneCanvas doc={doc} selectedId={selectedId} onSelect={setSelectedId} focusId={focusId} />
           ) : (

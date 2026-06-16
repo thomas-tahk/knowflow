@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>knowflow — Deploy & Setup</title>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --paper:#F6F2EA; --ink:#29281F; --ink2:#5C564B; --muted:#978D7C;
+    --line:#E4DBCD; --accent:#0F766E; --code-bg:#FBF8F2; }
+  *{box-sizing:border-box}
+  body{ margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Hanken Grotesk",ui-sans-serif,system-ui,sans-serif; line-height:1.6; }
+  .wrap{ max-width:880px; margin:0 auto; padding:48px 28px 120px; }
+  h1,h2,h3,h4{ line-height:1.25; }
+  h1{ font-size:30px; border-bottom:2px solid var(--accent); padding-bottom:.35em; }
+  h2{ font-size:22px; margin-top:2em; border-bottom:1px solid var(--line); padding-bottom:.3em; }
+  h3{ font-size:17px; margin-top:1.6em; color:#1e3a36; }
+  h4{ font-size:14.5px; color:var(--ink2); }
+  a{ color:var(--accent); }
+  p,li{ font-size:15px; }
+  code{ font-family:"JetBrains Mono",monospace; font-size:13px; background:var(--code-bg);
+    border:1px solid var(--line); border-radius:5px; padding:1px 5px; }
+  pre{ background:var(--code-bg); border:1px solid var(--line); border-radius:12px;
+    padding:16px 18px; overflow-x:auto; }
+  pre code{ border:0; padding:0; background:none; font-size:12.5px; line-height:1.55; }
+  blockquote{ border-left:3px solid var(--accent); margin:1em 0; padding:.4em 1em;
+    background:#EAF1EF; border-radius:0 8px 8px 0; color:var(--ink2); }
+  table{ border-collapse:collapse; width:100%; margin:1em 0; font-size:14px; }
+  th,td{ border:1px solid var(--line); padding:7px 10px; text-align:left; vertical-align:top; }
+  th{ background:#F0E9DC; }
+  hr{ border:0; border-top:1px solid var(--line); margin:2.5em 0; }
+  input[type=checkbox]{ margin-right:8px; }
+  li{ margin:.2em 0; }
+</style>
+</head>
+<body><div class="wrap">
+<h1>knowflow — Deploy &amp; Setup Guide</h1>
+<p>Do these in order. Supabase and Google Chat give you values you&#39;ll paste into Vercel, so set them up first.</p>
+<p>You&#39;ll end up with <strong>5 environment variables</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>What it is</th>
+<th>Where it comes from</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ANTHROPIC_API_KEY</code></td>
+<td>AI diagram generation</td>
+<td>console.anthropic.com</td>
+</tr>
+<tr>
+<td><code>APP_PASSWORD</code></td>
+<td>the shared team password</td>
+<td>you choose it</td>
+</tr>
+<tr>
+<td><code>SUPABASE_URL</code></td>
+<td>cloud storage project URL</td>
+<td>Supabase → Settings → API</td>
+</tr>
+<tr>
+<td><code>SUPABASE_SERVICE_KEY</code></td>
+<td>cloud storage secret key</td>
+<td>Supabase → Settings → API (service_role)</td>
+</tr>
+<tr>
+<td><code>GOOGLE_CHAT_WEBHOOK_URL</code></td>
+<td>where feedback posts</td>
+<td>Google Chat space → Webhooks</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>Tip: to test everything locally first, put these same five in a <code>.env.local</code> file in the project root, then <code>npm run dev</code>. (<code>.env.local</code> is gitignored.)</p>
+</blockquote>
+<hr>
+<h2>A. Supabase (shared diagram storage)</h2>
+<ol>
+<li>Go to <strong><a href="https://supabase.com">https://supabase.com</a></strong> → <strong>Sign in</strong> (you can use your GitHub account).</li>
+<li>Click <strong>New project</strong>.<ul>
+<li><strong>Name:</strong> <code>knowflow</code></li>
+<li><strong>Database password:</strong> generate one and save it somewhere (you won&#39;t need it for the app, but Supabase requires it).</li>
+<li><strong>Region:</strong> pick a <strong>US</strong> region (e.g. <em>East US</em> or <em>West US</em>).</li>
+<li>Click <strong>Create new project</strong> and wait ~2 minutes while it provisions.</li>
+</ul>
+</li>
+<li>In the left sidebar, open <strong>SQL Editor</strong> → <strong>New query</strong>, paste this, and click <strong>Run</strong>:<pre><code class="language-sql">create table documents (
+  id text primary key,
+  title text,
+  preset text,
+  status text,
+  description text,
+  data jsonb not null,
+  updated_at timestamptz
+);
+</code></pre>
+You should see &quot;Success. No rows returned.&quot; (No row-level-security setup needed — only our server touches this table, using the secret key.)</li>
+<li>Open <strong>Settings</strong> (gear icon, bottom-left) → <strong>API</strong>. Copy two things:<ul>
+<li><strong>Project URL</strong> → this is your <code>SUPABASE_URL</code></li>
+<li>Under <strong>Project API keys</strong>, the <strong><code>service_role</code></strong> key (click to reveal — it&#39;s the <em>secret</em> one, <strong>not</strong> <code>anon</code>) → this is your <code>SUPABASE_SERVICE_KEY</code></li>
+<li>⚠️ The <code>service_role</code> key is powerful — only ever paste it into a server env var, never share it or put it in client code. (Our app keeps it server-side.)</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2>B. Google Chat (feedback destination)</h2>
+<blockquote>
+<p>Note: incoming webhooks require a <strong>Google Workspace</strong> account (your district one), and your Workspace admin must allow webhooks. If you don&#39;t see the option, that&#39;s the likely reason — ask your admin or use a space you own.</p>
+</blockquote>
+<ol>
+<li>Open <strong><a href="https://chat.google.com">https://chat.google.com</a></strong> in a browser.</li>
+<li>Create a space for feedback (or pick an existing one): <strong>+ → Create a space</strong>, name it e.g. <code>knowflow feedback</code>, Create.</li>
+<li>Click the <strong>space name</strong> at the top → <strong>Apps &amp; integrations</strong> (or <strong>Manage webhooks</strong>).</li>
+<li>Click <strong>Add webhooks</strong> (or <strong>Webhooks → Add</strong>).<ul>
+<li><strong>Name:</strong> <code>knowflow</code></li>
+<li>(Avatar URL optional)</li>
+<li>Click <strong>Save</strong>.</li>
+</ul>
+</li>
+<li><strong>Copy</strong> the webhook URL it shows (starts with <code>https://chat.googleapis.com/v1/spaces/...</code>) → this is your <code>GOOGLE_CHAT_WEBHOOK_URL</code>.</li>
+</ol>
+<hr>
+<h2>C. Vercel (hosting)</h2>
+<ol>
+<li>Go to <strong><a href="https://vercel.com">https://vercel.com</a></strong> → <strong>Sign in with GitHub</strong>.</li>
+<li><strong>Add New… → Project</strong>.</li>
+<li>Find <strong><code>knowflow</code></strong> in the repo list → <strong>Import</strong>. (If it&#39;s not listed, click <strong>Adjust GitHub App Permissions</strong> and grant Vercel access to the private repo.)</li>
+<li>On the configure screen:<ul>
+<li><strong>Framework Preset:</strong> should auto-detect <strong>Vite</strong>. Leave Build Command (<code>npm run build</code>) and Output Directory (<code>dist</code>) as detected.</li>
+<li>Expand <strong>Environment Variables</strong> and add all <strong>five</strong> from the table above (Name + Value, one per row).</li>
+</ul>
+</li>
+<li>Click <strong>Deploy</strong> and wait for it to finish. You&#39;ll get a URL like <code>https://knowflow-xxxx.vercel.app</code>.</li>
+<li><strong>Point Vercel at the right branch.</strong> By default Vercel deploys the <code>main</code> branch, but our work is on <code>slice1-plan2-canvas</code>. Either:<ul>
+<li><strong>(Recommended)</strong> have me <strong>merge the branch into <code>main</code></strong> and push — then Vercel deploys it automatically; or</li>
+<li>In Vercel: <strong>Project → Settings → Git → Production Branch</strong>, set it to <code>slice1-plan2-canvas</code>, then redeploy.</li>
+</ul>
+</li>
+</ol>
+<h3>Verify the deployment</h3>
+<ul>
+<li>Open the URL → you should see the <strong>password screen</strong>. Enter your <code>APP_PASSWORD</code>.</li>
+<li>Click <strong>✨ Generate</strong>, paste a few notes, Generate → a diagram should appear (confirms <code>ANTHROPIC_API_KEY</code>).</li>
+<li>Make any edit, then <strong>reload</strong> → it should still be there (confirms Supabase storage).</li>
+<li>Open the app in a <strong>second browser/incognito</strong>, log in → you should see the <strong>same</strong> diagrams (confirms it&#39;s a shared library, not localStorage).</li>
+<li>Click <strong>💬 Feedback</strong>, send a test note → it should appear in your Google Chat space.</li>
+</ul>
+<hr>
+<h2>Notes</h2>
+<ul>
+<li><strong>Changing an env var later</strong> requires a redeploy (Vercel → Deployments → ⋯ → Redeploy), or it happens automatically on your next push.</li>
+<li><strong>Cost:</strong> each AI generation calls Anthropic and costs money. The password gate limits this to your team. Keep an eye on usage in the Anthropic console.</li>
+<li><strong>Storage fallback:</strong> if <code>SUPABASE_URL</code>/<code>SUPABASE_SERVICE_KEY</code> are missing, the app silently uses each browser&#39;s localStorage instead — so if diagrams aren&#39;t shared/persisting, check those two vars are set in Vercel.</li>
+</ul>
+
+</div></body>
+</html>

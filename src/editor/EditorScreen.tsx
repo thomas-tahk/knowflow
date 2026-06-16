@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KnowflowDoc, Preset, BlockType } from '../core/types';
 import { getPreset } from '../core/presets';
 import { createDoc } from '../core/createDoc';
@@ -7,8 +7,8 @@ import {
   addBlock, addConnection, removeConnection, setConnectionLabel,
   moveBlock, resizeBlock, resetLayout, renameDoc, setDescription, clearDoc,
 } from '../core/operations';
-import { DocumentStore } from '../core/persistence';
-import { SAMPLES } from '../canvas/samples';
+import type { DocSummary } from '../core/persistence';
+import { listDocs, getDoc, saveDoc, removeDoc } from '../data/library';
 import { DiagramCanvas } from '../canvas/DiagramCanvas';
 import { FishboneCanvas } from '../canvas/FishboneCanvas';
 import { Palette } from './Palette';
@@ -22,14 +22,10 @@ import { useAutosave } from './useAutosave';
 import { useDocHistory } from './useDocHistory';
 import './EditorScreen.css';
 
-const store = new DocumentStore(localStorage);
-
-function seed(preset: Preset): KnowflowDoc {
-  return store.load(SAMPLES[preset].id) ?? SAMPLES[preset];
-}
-
 export function EditorScreen() {
-  const { doc, setDoc, resetDoc, undo, redo, canUndo, canRedo } = useDocHistory(seed('flowchart'));
+  const { doc, setDoc, resetDoc, undo, redo, canUndo, canRedo } = useDocHistory(createDoc('flowchart', 'Untitled'));
+  const [library, setLibrary] = useState<DocSummary[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -38,24 +34,48 @@ export function EditorScreen() {
   const [exportOpen, setExportOpen] = useState(false);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
-  const status = useAutosave(doc, store);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const isFishbone = doc.preset === 'fishbone';
   const connectable = doc.preset === 'flowchart' || doc.preset === 'decisionTree';
   const errors = useMemo(() => getPreset(doc.preset).validate(doc), [doc]);
 
-  const loadDoc = (next: KnowflowDoc) => {
+  // Keep the library list in sync after a save/rename without re-fetching every keystroke.
+  const upsertSummary = useCallback((d: KnowflowDoc) => {
+    setLibrary(prev => [
+      { id: d.id, title: d.title, preset: d.preset, status: d.meta.status, updatedAt: d.meta.updatedAt },
+      ...prev.filter(s => s.id !== d.id),
+    ]);
+  }, []);
+
+  const save = useCallback(async (d: KnowflowDoc) => { await saveDoc(d); upsertSummary(d); }, [upsertSummary]);
+  const status = useAutosave(doc, save);
+
+  // Load the shared library on startup: open the most recent diagram, or seed a blank one.
+  const booted = useRef(false);
+  useEffect(() => {
+    if (booted.current) return; booted.current = true;
+    (async () => {
+      let list = await listDocs();
+      if (list.length) { const d = await getDoc(list[0].id); if (d) resetDoc(d); }
+      else { const blank = createDoc('flowchart', 'Untitled'); await saveDoc(blank); resetDoc(blank); list = await listDocs(); }
+      setLibrary(list);
+      setLoading(false);
+    })();
+  }, [resetDoc]);
+
+  const switchTo = (next: KnowflowDoc) => {
     resetDoc(next); setSelectedId(null); setSelectedEdgeId(null); setFocusId(null); setConnectMode(false);
   };
-  const newBlank = (preset: Preset) => loadDoc(createDoc(preset, 'Untitled'));
-  const openSaved = (id: string) => { const d = store.load(id); if (d) loadDoc(d); };
-  const deleteDoc = (id: string) => {
-    const summary = store.list().find(s => s.id === id);
+  const newBlank = (preset: Preset) => { const d = createDoc(preset, 'Untitled'); switchTo(d); upsertSummary(d); };
+  const openSaved = async (id: string) => { const d = await getDoc(id); if (d) switchTo(d); };
+  const handleDeleteDoc = async (id: string) => {
+    const summary = library.find(s => s.id === id);
     if (!window.confirm(`Delete "${summary?.title || 'this diagram'}"? This can't be undone.`)) return;
-    store.remove(id);
-    if (id === doc.id) loadDoc(seed('flowchart'));
-    else setDoc({ ...doc });
+    await removeDoc(id);
+    const rest = library.filter(s => s.id !== id);
+    setLibrary(rest);
+    if (id === doc.id) { if (rest.length) openSaved(rest[0].id); else newBlank('flowchart'); }
   };
   const clearCanvas = () => {
     if (!window.confirm('Clear this diagram? All blocks will be removed.')) return;
@@ -111,6 +131,8 @@ export function EditorScreen() {
   const handleDelete = (id: string) => { setDoc(deleteBlock(doc, id)); setSelectedId(null); };
 
   const rightLabel = selectedEdgeId ? 'Connection' : selectedId ? 'Edit' : 'Add';
+
+  if (loading) return <div className="editor-loading">Loading your diagrams…</div>;
 
   return (
     <div className="editor">
@@ -189,12 +211,12 @@ export function EditorScreen() {
             </div>
             <div className="panel-body">
               <DiagramsPanel
-                docs={store.list().sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))}
+                docs={[...library].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))}
                 activeId={doc.id}
                 onOpen={openSaved}
                 onNew={newBlank}
                 onGenerate={() => setShowGenerate(true)}
-                onDelete={deleteDoc}
+                onDelete={handleDeleteDoc}
               />
             </div>
           </aside>
@@ -242,7 +264,7 @@ export function EditorScreen() {
         <GeneratePanel
           defaultPreset={doc.preset}
           onClose={() => setShowGenerate(false)}
-          onGenerated={(generated) => { loadDoc(generated); setShowGenerate(false); }}
+          onGenerated={(generated) => { switchTo(generated); upsertSummary(generated); setShowGenerate(false); }}
         />
       )}
     </div>

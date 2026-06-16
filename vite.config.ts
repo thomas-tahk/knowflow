@@ -34,6 +34,27 @@ export default defineConfig(({ mode }) => {
             })
           })
 
+          server.middlewares.use('/api/docs', (req, res) => {
+            const url = new URL(req.url ?? '', 'http://localhost')
+            const id = url.searchParams.get('id')
+            readBody(req).then(async (payload) => {
+              try {
+                const mod = await server.ssrLoadModule('/src/server/docs.ts')
+                let result: unknown = { ok: true }
+                if (req.method === 'GET') result = id ? await mod.getDoc(id) : await mod.listDocs()
+                else if (req.method === 'PUT' || req.method === 'POST') await mod.saveDoc(payload)
+                else if (req.method === 'DELETE') await mod.deleteDoc(id)
+                else { res.statusCode = 405; res.end('Method Not Allowed'); return }
+                res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(result))
+              } catch (e) {
+                // StorageNotConfigured (no Supabase env) -> 501 so the client uses localStorage.
+                res.statusCode = (e as Error)?.name === 'StorageNotConfigured' ? 501 : 500
+                res.setHeader('content-type', 'application/json')
+                res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }))
+              }
+            })
+          })
+
           server.middlewares.use('/api/feedback', (req, res) => {
             if (req.method !== 'POST') { res.statusCode = 405; res.end('Method Not Allowed'); return }
             readBody(req).then(async (payload) => {

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KnowflowDoc } from '../core/types';
-import type { DocumentStore } from '../core/persistence';
 
 export type SaveStatus = 'idle' | 'saving' | 'saved';
 
@@ -13,12 +12,17 @@ export function makeDebouncedSaver(save: (doc: KnowflowDoc) => void, delay: numb
   };
 }
 
-/** Debounced autosave of the doc into the store. Returns a status for the toolbar. */
-export function useAutosave(doc: KnowflowDoc, store: DocumentStore, delay = 600): SaveStatus {
+/** Debounced autosave of the doc via `save` (sync or async). Returns a status for the toolbar. */
+export function useAutosave(doc: KnowflowDoc, save: (doc: KnowflowDoc) => void | Promise<void>, delay = 600): SaveStatus {
   const [status, setStatus] = useState<SaveStatus>('idle');
+  const saveRef = useRef(save);
+  saveRef.current = save;
+
   const saverRef = useRef<((doc: KnowflowDoc) => void) | null>(null);
   if (!saverRef.current) {
-    saverRef.current = makeDebouncedSaver((d) => { store.save(d); setStatus('saved'); }, delay);
+    saverRef.current = makeDebouncedSaver(async (d) => {
+      try { await saveRef.current(d); setStatus('saved'); } catch { setStatus('idle'); }
+    }, delay);
   }
   const first = useRef(true);
   useEffect(() => {

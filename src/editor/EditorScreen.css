@@ -1,4 +1,5 @@
 .editor { height: 100vh; display: flex; flex-direction: column; background: #F6F2EA; }
+.editor-loading { height: 100vh; display: flex; align-items: center; justify-content: center; color: #978D7C; font-size: 14px; background: #F6F2EA; }
 
 /* ---- top bar ---- */
 .topbar {

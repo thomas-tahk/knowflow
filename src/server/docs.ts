@@ -8,6 +8,12 @@ export class StorageNotConfigured extends Error {
   constructor(message?: string) { super(message); this.name = 'StorageNotConfigured'; }
 }
 
+/** Thrown when the stored copy changed since the client last synced (someone else saved). */
+export class ConflictError extends Error {
+  currentUpdatedAt: string | null;
+  constructor(currentUpdatedAt: string | null) { super('Conflict'); this.name = 'Conflict'; this.currentUpdatedAt = currentUpdatedAt; }
+}
+
 const TABLE = 'documents';
 let cached: SupabaseClient | null = null;
 
@@ -32,13 +38,34 @@ export async function getDoc(id: string): Promise<KnowflowDoc | null> {
   return (data?.data as KnowflowDoc | undefined) ?? null;
 }
 
-export async function saveDoc(doc: KnowflowDoc): Promise<void> {
+export async function saveDoc(doc: KnowflowDoc, base?: string | null): Promise<void> {
   const row = {
     id: doc.id, title: doc.title, preset: doc.preset, status: doc.meta.status,
     description: doc.description ?? null, data: doc, updated_at: doc.meta.updatedAt,
   };
-  const { error } = await client().from(TABLE).upsert(row);
+  const c = client();
+
+  // No base → unconditional write (new doc, or an explicit "overwrite theirs").
+  if (!base) {
+    const { error } = await c.from(TABLE).upsert(row);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  // Conditional update: only succeed if the server copy still matches the version we opened.
+  const { data, error } = await c.from(TABLE).update(row).eq('id', doc.id).eq('updated_at', base).select('id');
   if (error) throw new Error(error.message);
+  if (data && data.length > 0) return;
+
+  // Nothing updated: either the row doesn't exist yet (insert) or someone else changed it (conflict).
+  const { data: existing, error: e2 } = await c.from(TABLE).select('updated_at').eq('id', doc.id).maybeSingle();
+  if (e2) throw new Error(e2.message);
+  if (!existing) {
+    const { error: e3 } = await c.from(TABLE).insert(row);
+    if (e3) throw new Error(e3.message);
+    return;
+  }
+  throw new ConflictError(existing.updated_at ?? null);
 }
 
 export async function deleteDoc(id: string): Promise<void> {

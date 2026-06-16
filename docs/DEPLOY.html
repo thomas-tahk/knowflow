@@ -93,10 +93,10 @@
   status text,
   description text,
   data jsonb not null,
-  updated_at timestamptz
+  updated_at text
 );
 </code></pre>
-You should see &quot;Success. No rows returned.&quot; (No row-level-security setup needed — only our server touches this table, using the secret key.)</li>
+You should see &quot;Success. No rows returned.&quot; (No row-level-security setup needed — only our server touches this table, using the secret key. <code>updated_at</code> is <code>text</code> on purpose — it&#39;s the exact token the concurrent-edit conflict check compares.)</li>
 <li>Open <strong>Settings</strong> (gear icon, bottom-left) → <strong>API</strong>. Copy two things:<ul>
 <li><strong>Project URL</strong> → this is your <code>SUPABASE_URL</code></li>
 <li>Under <strong>Project API keys</strong>, the <strong><code>service_role</code></strong> key (click to reveal — it&#39;s the <em>secret</em> one, <strong>not</strong> <code>anon</code>) → this is your <code>SUPABASE_SERVICE_KEY</code></li>

@@ -7,6 +7,11 @@ import { authHeaders } from '../auth/session';
 const local = new DocumentStore(localStorage);
 let localMode = false;
 
+/** The stored copy changed since we opened it — caller decides keep-mine vs take-theirs. */
+export class ConflictError extends Error {
+  constructor() { super('conflict'); this.name = 'Conflict'; }
+}
+
 async function call(path: string, init: RequestInit): Promise<Response> {
   return fetch(`/api/docs${path}`, {
     ...init,
@@ -34,13 +39,17 @@ export async function getDoc(id: string): Promise<KnowflowDoc | null> {
   } catch { localMode = true; return local.load(id); }
 }
 
-export async function saveDoc(doc: KnowflowDoc): Promise<void> {
+export async function saveDoc(doc: KnowflowDoc, base?: string | null): Promise<void> {
   if (localMode) { local.save(doc); return; }
   try {
-    const res = await call('', { method: 'PUT', body: JSON.stringify(doc) });
+    const res = await call('', { method: 'PUT', body: JSON.stringify({ doc, base }) });
     if (res.status === 501) { localMode = true; local.save(doc); return; }
+    if (res.status === 409) throw new ConflictError();
     if (!res.ok) throw new Error('save failed');
-  } catch { localMode = true; local.save(doc); }
+  } catch (e) {
+    if (e instanceof ConflictError) throw e; // surface conflicts to the editor
+    localMode = true; local.save(doc);        // network/other errors → keep working locally
+  }
 }
 
 export async function removeDoc(id: string): Promise<void> {

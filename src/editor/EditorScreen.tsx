@@ -8,7 +8,7 @@ import {
   moveBlock, resizeBlock, resetLayout, renameDoc, setDescription, clearDoc,
 } from '../core/operations';
 import type { DocSummary } from '../core/persistence';
-import { listDocs, getDoc, saveDoc, removeDoc } from '../data/library';
+import { listDocs, getDoc, saveDoc, removeDoc, ConflictError } from '../data/library';
 import { DiagramCanvas } from '../canvas/DiagramCanvas';
 import { FishboneCanvas } from '../canvas/FishboneCanvas';
 import { Palette } from './Palette';
@@ -34,7 +34,10 @@ export function EditorScreen() {
   const [exportOpen, setExportOpen] = useState(false);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
+  const [conflict, setConflict] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
+  // The server version we last synced with — used to detect a concurrent edit by someone else.
+  const lastSynced = useRef<string | null>(null);
 
   const isFishbone = doc.preset === 'fishbone';
   const connectable = doc.preset === 'flowchart' || doc.preset === 'decisionTree';
@@ -48,7 +51,16 @@ export function EditorScreen() {
     ]);
   }, []);
 
-  const save = useCallback(async (d: KnowflowDoc) => { await saveDoc(d); upsertSummary(d); }, [upsertSummary]);
+  const save = useCallback(async (d: KnowflowDoc) => {
+    try {
+      await saveDoc(d, lastSynced.current ?? undefined);
+      lastSynced.current = d.meta.updatedAt;
+      upsertSummary(d);
+    } catch (e) {
+      if (e instanceof ConflictError) { setConflict(true); throw e; } // surface; leave status not-saved
+      throw e;
+    }
+  }, [upsertSummary]);
   const status = useAutosave(doc, save);
 
   // Load the shared library on startup: open the most recent diagram, or seed a blank one.
@@ -57,15 +69,29 @@ export function EditorScreen() {
     if (booted.current) return; booted.current = true;
     (async () => {
       let list = await listDocs();
-      if (list.length) { const d = await getDoc(list[0].id); if (d) resetDoc(d); }
-      else { const blank = createDoc('flowchart', 'Untitled'); await saveDoc(blank); resetDoc(blank); list = await listDocs(); }
+      if (list.length) {
+        const d = await getDoc(list[0].id);
+        if (d) { resetDoc(d); lastSynced.current = d.meta.updatedAt; }
+      } else {
+        const blank = createDoc('flowchart', 'Untitled');
+        await saveDoc(blank);
+        resetDoc(blank); lastSynced.current = blank.meta.updatedAt;
+        list = await listDocs();
+      }
       setLibrary(list);
       setLoading(false);
     })();
   }, [resetDoc]);
 
   const switchTo = (next: KnowflowDoc) => {
-    resetDoc(next); setSelectedId(null); setSelectedEdgeId(null); setFocusId(null); setConnectMode(false);
+    resetDoc(next); lastSynced.current = next.meta.updatedAt;
+    setSelectedId(null); setSelectedEdgeId(null); setFocusId(null); setConnectMode(false); setConflict(false);
+  };
+
+  const takeTheirs = async () => { const theirs = await getDoc(doc.id); if (theirs) switchTo(theirs); setConflict(false); };
+  const keepMine = async () => {
+    await saveDoc(doc, undefined); // unconditional overwrite
+    lastSynced.current = doc.meta.updatedAt; upsertSummary(doc); setConflict(false);
   };
   const newBlank = (preset: Preset) => { const d = createDoc(preset, 'Untitled'); switchTo(d); upsertSummary(d); };
   const openSaved = async (id: string) => { const d = await getDoc(id); if (d) switchTo(d); };
@@ -266,6 +292,22 @@ export function EditorScreen() {
           onClose={() => setShowGenerate(false)}
           onGenerated={(generated) => { switchTo(generated); upsertSummary(generated); setShowGenerate(false); }}
         />
+      )}
+
+      {conflict && (
+        <div className="conflict-overlay">
+          <div className="conflict-modal">
+            <h2 className="conflict-title">Someone else changed this diagram</h2>
+            <p className="conflict-sub">
+              A teammate saved a newer version of “{doc.title || 'Untitled'}” while you were editing.
+              Choose how to resolve it:
+            </p>
+            <div className="conflict-actions">
+              <button className="conflict-take" onClick={takeTheirs}>Load theirs<br /><small>discards my changes</small></button>
+              <button className="conflict-keep" onClick={keepMine}>Keep mine<br /><small>overwrites theirs</small></button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

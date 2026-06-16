@@ -42,13 +42,14 @@ export default defineConfig(({ mode }) => {
                 const mod = await server.ssrLoadModule('/src/server/docs.ts')
                 let result: unknown = { ok: true }
                 if (req.method === 'GET') result = id ? await mod.getDoc(id) : await mod.listDocs()
-                else if (req.method === 'PUT' || req.method === 'POST') await mod.saveDoc(payload)
+                else if (req.method === 'PUT' || req.method === 'POST') await mod.saveDoc(payload.doc, payload.base)
                 else if (req.method === 'DELETE') await mod.deleteDoc(id)
                 else { res.statusCode = 405; res.end('Method Not Allowed'); return }
                 res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(result))
               } catch (e) {
-                // StorageNotConfigured (no Supabase env) -> 501 so the client uses localStorage.
-                res.statusCode = (e as Error)?.name === 'StorageNotConfigured' ? 501 : 500
+                // StorageNotConfigured -> 501 (client uses localStorage); Conflict -> 409.
+                const name = (e as Error)?.name
+                res.statusCode = name === 'StorageNotConfigured' ? 501 : name === 'Conflict' ? 409 : 500
                 res.setHeader('content-type', 'application/json')
                 res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }))
               }

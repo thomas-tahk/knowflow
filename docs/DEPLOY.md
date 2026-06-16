@@ -33,10 +33,10 @@ You'll end up with **5 environment variables**:
      status text,
      description text,
      data jsonb not null,
-     updated_at timestamptz
+     updated_at text
    );
    ```
-   You should see "Success. No rows returned." (No row-level-security setup needed — only our server touches this table, using the secret key.)
+   You should see "Success. No rows returned." (No row-level-security setup needed — only our server touches this table, using the secret key. `updated_at` is `text` on purpose — it's the exact token the concurrent-edit conflict check compares.)
 4. Open **Settings** (gear icon, bottom-left) → **API**. Copy two things:
    - **Project URL** → this is your `SUPABASE_URL`
    - Under **Project API keys**, the **`service_role`** key (click to reveal — it's the *secret* one, **not** `anon`) → this is your `SUPABASE_SERVICE_KEY`

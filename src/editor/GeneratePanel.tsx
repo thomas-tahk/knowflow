@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { KnowflowDoc, Preset } from '../core/types';
 import { ALL_PRESETS } from '../core/types';
 import { getPreset } from '../core/presets';
+import { authHeaders } from '../auth/session';
 import './GeneratePanel.css';
 
 interface Props {
@@ -46,7 +47,7 @@ export function GeneratePanel({ defaultPreset, onClose, onGenerated }: Props) {
     try {
       const res = await fetch('/api/generate', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ text, preset, title, image: image ?? undefined }),
       });
       const json = await res.json();

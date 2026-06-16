@@ -17,6 +17,7 @@ import { EdgeInspector } from './EdgeInspector';
 import { DiagramsPanel } from './DiagramsPanel';
 import { GeneratePanel } from './GeneratePanel';
 import { ValidationHints } from './ValidationHints';
+import { FeedbackButton } from './FeedbackButton';
 import { useAutosave } from './useAutosave';
 import { useDocHistory } from './useDocHistory';
 import './EditorScreen.css';
@@ -148,6 +149,7 @@ export function EditorScreen() {
               </div>
             )}
           </div>
+          <FeedbackButton context={`${getPreset(doc.preset).name} · ${doc.title || 'Untitled'}`} />
           <span className={`save save-${status}`}>{status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved ✓' : ''}</span>
         </div>
       </header>

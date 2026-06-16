@@ -7,6 +7,10 @@ export default async function handler(req: any, res: any) {
     res.status(405).json({ error: 'Method Not Allowed' });
     return;
   }
+  if (process.env.APP_PASSWORD && req.headers['x-app-password'] !== process.env.APP_PASSWORD) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
   try {
     const doc = await generateDiagram({ ...(req.body ?? {}), apiKey: process.env.ANTHROPIC_API_KEY });
     res.status(200).json(doc);

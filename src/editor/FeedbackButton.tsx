@@ -5,7 +5,10 @@ import './FeedbackButton.css';
 type State = 'idle' | 'sending' | 'sent' | 'error';
 
 /** 'Send feedback' button → posts a note (plus context) to the team's Google Chat space. */
-export function FeedbackButton({ context }: { context: string }) {
+export function FeedbackButton(
+  { context, className = 'tbtn', label = '💬 Feedback', onOpen }:
+  { context: string; className?: string; label?: string; onOpen?: () => void },
+) {
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState('');
   const [state, setState] = useState<State>('idle');
@@ -28,7 +31,7 @@ export function FeedbackButton({ context }: { context: string }) {
 
   return (
     <>
-      <button className="tbtn" onClick={() => { setOpen(true); setState('idle'); setError(null); }}>💬 Feedback</button>
+      <button className={className} onClick={() => { onOpen?.(); setOpen(true); setState('idle'); setError(null); }}>{label}</button>
       {open && (
         <div className="fb-overlay" onClick={() => setOpen(false)}>
           <div className="fb-modal" onClick={e => e.stopPropagation()}>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KnowflowDoc } from '../core/types';
 
-export type SaveStatus = 'idle' | 'saving' | 'saved';
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 /** Pure debouncer: only the last call within `delay` actually fires `save`. */
 export function makeDebouncedSaver(save: (doc: KnowflowDoc) => void, delay: number) {
@@ -21,7 +21,7 @@ export function useAutosave(doc: KnowflowDoc, save: (doc: KnowflowDoc) => void |
   const saverRef = useRef<((doc: KnowflowDoc) => void) | null>(null);
   if (!saverRef.current) {
     saverRef.current = makeDebouncedSaver(async (d) => {
-      try { await saveRef.current(d); setStatus('saved'); } catch { setStatus('idle'); }
+      try { await saveRef.current(d); setStatus('saved'); } catch { setStatus('error'); }
     }, delay);
   }
   const first = useRef(true);

@@ -31,7 +31,7 @@ export function EditorScreen() {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [connectMode, setConnectMode] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [conflict, setConflict] = useState(false);
@@ -123,7 +123,7 @@ export function EditorScreen() {
   }, [connectable, undo, redo]);
 
   const doExport = async (kind: 'png' | 'pdf') => {
-    setExportOpen(false);
+    setMoreOpen(false);
     if (!canvasRef.current) return;
     const { exportPng, exportPdf } = await import('./exporters');
     (kind === 'png' ? exportPng : exportPdf)(canvasRef.current, doc.title, doc.description ?? '');
@@ -184,21 +184,27 @@ export function EditorScreen() {
               {connectMode ? 'Connecting…' : 'Connect'}
             </button>
           )}
-          <button className="tbtn ghost" onClick={() => setDoc(resetLayout(doc))}
-            title="Snap blocks back to the neat automatic layout — your content stays.">Tidy up</button>
-          <button className="tbtn danger" onClick={clearCanvas} title="Remove every block (asks first).">Clear</button>
+          <span className={`save save-${status}`} role="status" aria-live="polite"
+            title="Your changes save automatically to the shared library.">
+            {status === 'saving' ? 'Saving…' : status === 'error' ? '⚠ Not saved' : 'Saved ✓'}
+          </span>
 
-          <div className="export-wrap">
-            <button className="tbtn" onClick={() => setExportOpen(o => !o)}>Export ▾</button>
-            {exportOpen && (
-              <div className="export-menu" onMouseLeave={() => setExportOpen(false)}>
+          <div className="more-wrap">
+            <button className="tbtn" onClick={() => setMoreOpen(o => !o)}
+              aria-haspopup="true" aria-expanded={moreOpen} title="More actions">⋯ More</button>
+            {moreOpen && (
+              <div className="more-menu" onMouseLeave={() => setMoreOpen(false)}>
+                <button onClick={() => { setDoc(resetLayout(doc)); setMoreOpen(false); }}
+                  title="Snap blocks back to the neat automatic layout — your content stays.">Tidy up layout</button>
                 <button onClick={() => doExport('png')}>Download PNG</button>
                 <button onClick={() => doExport('pdf')}>Download PDF</button>
+                <FeedbackButton className="more-item" label="💬 Send feedback" onOpen={() => setMoreOpen(false)}
+                  context={`${getPreset(doc.preset).name} · ${doc.title || 'Untitled'}`} />
+                <button className="danger" onClick={() => { setMoreOpen(false); clearCanvas(); }}
+                  title="Remove every block (asks first).">Clear all blocks</button>
               </div>
             )}
           </div>
-          <FeedbackButton context={`${getPreset(doc.preset).name} · ${doc.title || 'Untitled'}`} />
-          <span className={`save save-${status}`}>{status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved ✓' : ''}</span>
         </div>
       </header>
 
@@ -213,6 +219,7 @@ export function EditorScreen() {
               connectable={connectable}
               connectMode={connectMode}
               focusId={focusId}
+              selectedId={selectedId}
               selectedEdgeId={selectedEdgeId}
               onSelect={setSelectedId}
               onSelectEdge={setSelectedEdgeId}

@@ -31,9 +31,6 @@
   border: 1px solid #DED3C2; background: #fff; color: #5C564B; border-radius: 8px; padding: 7px 12px;
 }
 .tbtn:hover { border-color: #0F766E; color: #0F766E; }
-.tbtn.ghost { border-style: dashed; }
-.tbtn.danger { color: #8A4632; }
-.tbtn.danger:hover { border-color: #C0573E; color: #C0573E; background: #F9EEEA; }
 .tbtn.active { background: #0F766E; border-color: #0F766E; color: #fff; }
 .tbtn.icon { padding: 6px 9px; font-size: 15px; line-height: 1; }
 .tbtn:disabled { opacity: .4; cursor: not-allowed; }
@@ -48,19 +45,26 @@
 /* Keep the React Flow zoom/fit controls a compact horizontal bar at bottom-center,
    clear of the floating side panels. */
 .react-flow__controls { flex-direction: row !important; box-shadow: 0 8px 22px -14px rgba(41,40,31,.4); border-radius: 9px; overflow: hidden; }
-.export-wrap { position: relative; }
-.export-menu {
+.more-wrap { position: relative; }
+.more-menu {
   position: absolute; right: 0; top: 40px; background: #fff; border: 1px solid #DED3C2;
-  border-radius: 9px; box-shadow: 0 14px 30px -16px rgba(41,40,31,.4); overflow: hidden; min-width: 156px; z-index: 30;
+  border-radius: 9px; box-shadow: 0 14px 30px -16px rgba(41,40,31,.4); overflow: hidden; min-width: 170px; z-index: 30;
 }
-.export-menu button {
+.more-menu button {
   display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; font-weight: 600;
   cursor: pointer; border: 0; background: #fff; color: #5C564B; padding: 9px 12px;
 }
-.export-menu button + button { border-top: 1px solid #EAE2D6; }
-.export-menu button:hover { background: #F4EFE6; color: #0F766E; }
-.save { font-size: 12.5px; color: #978D7C; min-width: 56px; text-align: right; }
-.save-saved { color: #0F766E; }
+.more-menu button + button, .more-menu > * + * { border-top: 1px solid #EAE2D6; }
+.more-menu button:hover { background: #F4EFE6; color: #0F766E; }
+.more-menu button.danger { color: #8A4632; }
+.more-menu button.danger:hover { background: #F9EEEA; color: #C0573E; }
+
+/* Autosave status pill — always visible so it's clear when work is saved. */
+.save { font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px;
+  background: #EEF1F0; color: #6B7A76; white-space: nowrap; }
+.save-saved { color: #0F766E; background: #E4EFEC; }
+.save-saving { color: #8A6D3B; background: #F6EFE0; }
+.save-error { color: #C0573E; background: #F9EEEA; }
 
 /* ---- stage: full-bleed canvas with floating panels ---- */
 .stage { position: relative; flex: 1; min-height: 0; }

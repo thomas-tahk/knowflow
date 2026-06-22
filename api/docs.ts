@@ -1,5 +1,9 @@
 // Vercel serverless function: password-gated CRUD for the shared diagram library (Supabase).
-import { listDocs, getDoc, saveDoc, deleteDoc, StorageNotConfigured, ConflictError } from '../src/server/docs';
+// NOTE: explicit .js extension is required — the project is ESM ("type":"module"),
+// and Vercel runs this as a native ESM function where extensionless imports throw
+// ERR_MODULE_NOT_FOUND (surfaces as FUNCTION_INVOCATION_FAILED). Dev/build don't hit
+// this file (dev uses Vite ssrLoadModule on src/server/docs.ts directly).
+import { listDocs, getDoc, saveDoc, deleteDoc, StorageNotConfigured, ConflictError } from '../src/server/docs.js';
 
 export default async function handler(req: any, res: any) {
   if (process.env.APP_PASSWORD && req.headers['x-app-password'] !== process.env.APP_PASSWORD) {

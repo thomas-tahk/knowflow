@@ -1,10 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { KnowflowDoc, Preset } from '../core/types';
-import { getPreset } from '../core/presets';
-import { systemClock, type Clock } from '../core/ids';
-import { buildDoc, type DraftDiagram } from './buildDoc';
-import { diagramTool, TOOL_NAME } from './diagramTool';
-import { presetGuidance } from './prompts';
+import { getPreset } from '../core/presets/index.js';
+import { systemClock, type Clock } from '../core/ids.js';
+import { buildDoc, type DraftDiagram } from './buildDoc.js';
+import { diagramTool, TOOL_NAME } from './diagramTool.js';
+import { presetGuidance } from './prompts.js';
 
 const MODEL = 'claude-sonnet-4-6';
 

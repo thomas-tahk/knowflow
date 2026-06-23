@@ -1,5 +1,5 @@
 import type { Preset } from '../core/types';
-import { getPreset } from '../core/presets';
+import { getPreset } from '../core/presets/index.js';
 
 export const TOOL_NAME = 'emit_diagram';
 

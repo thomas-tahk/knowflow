@@ -1,7 +1,7 @@
 // src/core/presets/decisionTree.ts
 import type { KnowflowDoc, BlockType, ValidationError } from '../types';
 import type { PresetDef } from './types';
-import { bfsOrder } from './flowchart';
+import { bfsOrder } from './flowchart.js';
 
 const ALLOWED: BlockType[] = ['question', 'outcome'];
 

@@ -36,11 +36,23 @@ Adding a new step/decision/etc. blanked the page; required refresh.
 New nodes spawn in a position the user dislikes; the auto-layout placement for freshly added
 blocks needs tuning. Deferred — cosmetic, surfaced 2026-06-23 right after the crash fix.
 
-### 2. 🟠 AI "Generate" button likely still errors
-`/api/generate` has the same ESM-import bug the docs fn had, but a deeper import chain:
-`api/generate.ts` → `../src/server/generate` → pulls in shared `src/core` files. The one-line
-`.js`-extension fix won't cleanly cover the whole chain. Needs the extension applied across the
-imported ESM chain (or a build/bundling fix for the function).
+### 2. ✅ FIXED — AI "Generate" button errored (ERR_MODULE_NOT_FOUND)
+`/api/generate` had the same native-ESM import bug the docs fn had, but a deeper import chain:
+`api/generate.ts` → `../src/server/generate` → shared `src/core` files. The one-line
+`.js`-extension fix did not cover the whole chain.
+- **Root cause (confirmed):** native ESM forbids both extensionless relative imports *and*
+  directory imports. `.js` was missing on every value import in the runtime chain, AND
+  `../core/presets` is a *directory* — naively appending `.js` gives a non-existent
+  `presets.js`; it must point at `presets/index.js`.
+- **Fix:** added `.js` to value (runtime) relative imports across the chain, and `/index.js`
+  to the `presets` directory import. Files: `api/generate.ts`, `src/server/generate.ts`,
+  `src/server/buildDoc.ts`, `src/server/diagramTool.ts`, `src/core/presets/index.ts`,
+  `src/core/presets/decisionTree.ts`, `src/core/createDoc.ts`. Type-only imports left
+  extensionless (erased at runtime) — matches the docs.ts fix convention.
+- **Verified** with a faithful loop that mirrors Vercel: esbuild-transpile the chain to `.js`
+  (per-file, no bundle), then load the compiled `api/generate.js` under native ESM — went from
+  `ERR_MODULE_NOT_FOUND` (red) to clean resolve (green). Build + all 77 tests still pass.
+- **Note:** sibling fns `feedback.ts` / `login.ts` have no relative imports — not affected.
 
 ### 3. 🟡 Inline on-node text editing
 Node text is a static label; all editing is forced into the right-side Inspector panel, which

@@ -1,5 +1,5 @@
 import type { KnowflowDoc, Preset, Block } from './types';
-import { systemClock, type Clock } from './ids';
+import { systemClock, type Clock } from './ids.js';
 
 export function createDoc(preset: Preset, title = 'Untitled', clock: Clock = systemClock): KnowflowDoc {
   const now = clock.nowIso();

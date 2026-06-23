@@ -1,6 +1,11 @@
 // Vercel serverless function (production). Local dev uses the Vite middleware in vite.config.ts.
 // Both call the same generateDiagram handler; the Anthropic key is read from the server env only.
-import { generateDiagram } from '../src/server/generate';
+// NOTE: explicit .js extensions are required throughout this runtime import chain —
+// the project is ESM ("type":"module") and Vercel runs this as a native ESM function
+// where extensionless / directory imports throw ERR_MODULE_NOT_FOUND (surfaces as
+// FUNCTION_INVOCATION_FAILED). Dev/build don't hit this file (dev uses Vite
+// ssrLoadModule on src/server/generate.ts directly).
+import { generateDiagram } from '../src/server/generate.js';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {

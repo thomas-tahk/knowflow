@@ -1,6 +1,6 @@
 import type { KnowflowDoc, Block, Preset, BlockType } from '../core/types';
-import { createDoc } from '../core/createDoc';
-import { systemClock, type Clock } from '../core/ids';
+import { createDoc } from '../core/createDoc.js';
+import { systemClock, type Clock } from '../core/ids.js';
 
 /** The shape the model emits via the emit_diagram tool (local keys, not final ids). */
 export interface DraftBlock { key: string; type: BlockType; text: string; category?: string; }

@@ -35,7 +35,13 @@ function Inner(props: Props) {
     onSelect, onSelectEdge, onMove, onResize, onConnect, onDeleteConnection } = props;
   const { fitView } = useReactFlow();
   const [pending, setPending] = useState<string | null>(null);
-  useEffect(() => { if (!connectMode) setPending(null); }, [connectMode]);
+  // Clear the in-progress connection when leaving connect mode. Done during render via
+  // the previous-value pattern (not an effect) to avoid a synchronous setState-in-effect.
+  const [wasConnectMode, setWasConnectMode] = useState(connectMode);
+  if (wasConnectMode !== connectMode) {
+    setWasConnectMode(connectMode);
+    if (!connectMode) setPending(null);
+  }
 
   const derived = useMemo(() => toReactFlow(doc, layoutDoc(doc)), [doc]);
 

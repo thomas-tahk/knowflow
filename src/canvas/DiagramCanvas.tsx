@@ -82,15 +82,34 @@ function Inner(props: Props) {
     [derived.edges, selectedEdgeId, onDeleteConnection],
   );
 
-  // Click-to-connect: first click picks the source, second click links to the target.
+  // Selection is one-directional: clicks set it here. We deliberately do NOT use
+  // onSelectionChange to read React Flow's selection back into app state — combined with
+  // driving `selected` through the nodes prop, that creates a push/pull feedback loop with
+  // no fixed point (React #185 "Maximum update depth"). See KNOWN-ISSUES #1.
   const handleNodeClick = useCallback((_: unknown, node: Node) => {
-    if (!connectMode) return;
-    setPending(prev => {
-      if (!prev) return node.id;
-      if (node.id !== prev) onConnect?.(prev, node.id);
-      return null;
-    });
-  }, [connectMode, onConnect]);
+    // Click-to-connect: first click picks the source, second click links to the target.
+    if (connectMode) {
+      setPending(prev => {
+        if (!prev) return node.id;
+        if (node.id !== prev) onConnect?.(prev, node.id);
+        return null;
+      });
+      return;
+    }
+    onSelect?.(node.id);
+    onSelectEdge?.(null);
+  }, [connectMode, onConnect, onSelect, onSelectEdge]);
+
+  const handleEdgeClick = useCallback((_: unknown, edge: Edge) => {
+    onSelectEdge?.(edge.id);
+    onSelect?.(null);
+  }, [onSelect, onSelectEdge]);
+
+  const handlePaneClick = useCallback(() => {
+    setPending(null);
+    onSelect?.(null);
+    onSelectEdge?.(null);
+  }, [onSelect, onSelectEdge]);
 
   const renderNodes = useMemo(
     () => (connectMode ? nodes.map(n => ({ ...n, className: n.id === pending ? 'kf-pending' : undefined })) : nodes),
@@ -113,9 +132,9 @@ function Inner(props: Props) {
       onConnect={(c: Connection) => { if (c.source && c.target && c.source !== c.target) onConnect?.(c.source, c.target); }}
       onEdgesDelete={(eds) => eds.forEach(e => onDeleteConnection?.(e.id))}
       onNodeClick={handleNodeClick}
-      onPaneClick={() => setPending(null)}
+      onEdgeClick={handleEdgeClick}
+      onPaneClick={handlePaneClick}
       onNodeDragStop={editable ? handleDragStop : undefined}
-      onSelectionChange={({ nodes: ns, edges: es }) => { onSelect?.(ns[0]?.id ?? null); onSelectEdge?.(es[0]?.id ?? null); }}
       snapToGrid={editable}
       snapGrid={[16, 16]}
       minZoom={0.2}

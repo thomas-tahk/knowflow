@@ -156,6 +156,21 @@ export function EditorScreen() {
 
   const handleDelete = (id: string) => { setDoc(deleteBlock(doc, id)); setSelectedId(null); };
 
+  // Canvas callbacks must keep a stable identity across renders. They feed the `edges`
+  // and node arrays React Flow consumes as controlled props; a new reference each render
+  // makes React Flow re-sync its store every render, which (with onSelectionChange writing
+  // selection back) loops until React aborts with #185 ("Maximum update depth exceeded").
+  // Functional setDoc updates let these avoid depending on `doc`, so they never change.
+  const handleMove = useCallback((id: string, position: { x: number; y: number }) =>
+    setDoc(d => moveBlock(d, id, position)), [setDoc]);
+  const handleResize = useCallback((id: string, size: { w: number; h: number }) =>
+    setDoc(d => resizeBlock(d, id, size)), [setDoc]);
+  const handleCanvasConnect = useCallback((from: string, to: string) =>
+    setDoc(d => addConnection(d, from, to).doc), [setDoc]);
+  const handleDeleteConnection = useCallback((id: string) => {
+    setDoc(d => removeConnection(d, id)); setSelectedEdgeId(null);
+  }, [setDoc]);
+
   const rightLabel = selectedEdgeId ? 'Connection' : selectedId ? 'Edit' : 'Add';
 
   if (loading) return <div className="editor-loading">Loading your diagrams…</div>;
@@ -223,10 +238,10 @@ export function EditorScreen() {
               selectedEdgeId={selectedEdgeId}
               onSelect={setSelectedId}
               onSelectEdge={setSelectedEdgeId}
-              onMove={(id, position) => setDoc(moveBlock(doc, id, position))}
-              onResize={(id, size) => setDoc(resizeBlock(doc, id, size))}
-              onConnect={(from, to) => setDoc(addConnection(doc, from, to).doc)}
-              onDeleteConnection={(id) => { setDoc(removeConnection(doc, id)); setSelectedEdgeId(null); }}
+              onMove={handleMove}
+              onResize={handleResize}
+              onConnect={handleCanvasConnect}
+              onDeleteConnection={handleDeleteConnection}
             />
           )}
 

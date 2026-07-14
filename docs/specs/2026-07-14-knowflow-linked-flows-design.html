@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>knowflow — Linked Flows (design)</title>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --paper:#F6F2EA; --ink:#29281F; --ink2:#5C564B; --muted:#978D7C;
+    --line:#E4DBCD; --accent:#0F766E; --code-bg:#FBF8F2; }
+  *{box-sizing:border-box}
+  body{ margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Hanken Grotesk",ui-sans-serif,system-ui,sans-serif; line-height:1.6; }
+  .wrap{ max-width:880px; margin:0 auto; padding:48px 28px 120px; }
+  h1,h2,h3,h4{ line-height:1.25; }
+  h1{ font-size:30px; border-bottom:2px solid var(--accent); padding-bottom:.35em; }
+  h2{ font-size:22px; margin-top:2em; border-bottom:1px solid var(--line); padding-bottom:.3em; }
+  h3{ font-size:17px; margin-top:1.6em; color:#1e3a36; }
+  h4{ font-size:14.5px; color:var(--ink2); }
+  a{ color:var(--accent); }
+  p,li{ font-size:15px; }
+  code{ font-family:"JetBrains Mono",monospace; font-size:13px; background:var(--code-bg);
+    border:1px solid var(--line); border-radius:5px; padding:1px 5px; }
+  pre{ background:var(--code-bg); border:1px solid var(--line); border-radius:12px;
+    padding:16px 18px; overflow-x:auto; }
+  pre code{ border:0; padding:0; background:none; font-size:12.5px; line-height:1.55; }
+  blockquote{ border-left:3px solid var(--accent); margin:1em 0; padding:.4em 1em;
+    background:#EAF1EF; border-radius:0 8px 8px 0; color:var(--ink2); }
+  hr{ border:0; border-top:1px solid var(--line); margin:2.5em 0; }
+  li{ margin:.2em 0; }
+  .meta{ color:var(--ink2); font-size:14px; }
+  .meta strong{ color:var(--ink); }
+</style>
+</head>
+<body><div class="wrap">
+<h1>knowflow — Linked Flows (design)</h1>
+<p class="meta"><strong>Date:</strong> 2026-07-14 &nbsp;·&nbsp; <strong>Status:</strong> design approved, spec under review<br>
+<strong>Supersedes/extends:</strong> <code>docs/specs/2026-06-11-knowflow-design.md</code> (adds one field to the document model; changes nothing existing)</p>
+
+<h2>Why</h2>
+<p>Opening knowflow today lands you on an empty Diagrams panel — <em>"No saved diagrams yet."</em> — and a blank canvas. That barren cold-start is the real reason momentum stalled: the app asks you to do all the work before it returns any value.</p>
+<p>This feature fixes that by <strong>seeding knowflow with curated, real troubleshooting flows that are present the moment you open it</strong>, and by letting <strong>any flow link to another whole flow</strong> so those flows can be big and real without collapsing into one unreadable wall of boxes.</p>
+<p>The mental model is a <strong>web of complete flows</strong> (like linked web pages), not a hierarchy. There is no "parent/child" or "drill into a sub-diagram." A node in one flow can <em>link to</em> another flow; following the link jumps you there; a Back control returns you.</p>
+
+<h3>Success criteria</h3>
+<ul>
+<li>Open the app with an empty library and <strong>the curated starter flows are already listed</strong>, no setup, no backend.</li>
+<li>In the <strong>Password Changed</strong> flow, the <strong>2FA</strong> node is visibly a link; clicking it opens the <strong>2FA</strong> flow full-canvas.</li>
+<li>A <strong>Back</strong> control returns you to Password Changed.</li>
+<li>All of the above works with <strong>Supabase unreachable</strong> (offline).</li>
+<li>The existing editor, renderers, exporters, validators, and 77 tests are unaffected.</li>
+</ul>
+
+<h2>Non-goals (this spec)</h2>
+<ul>
+<li>Flow-level "related flows" list (links not anchored to a node). <em>Maybe later.</em></li>
+<li>A bird's-eye "map" view of the whole web. <em>Derivable from links later; not built now.</em></li>
+<li>Representing links in the accessible / read-aloud narrative view. <em>That view does not exist yet; out of scope until it does.</em></li>
+<li>Node create/connect UX friction (tracked separately — KNOWN-ISSUES #1b, #3).</li>
+<li>Any Supabase / backend change.</li>
+</ul>
+
+<h2>Domain vocabulary</h2>
+<ul>
+<li><strong>Flow</strong> — a <code>KnowflowDoc</code>. Unchanged. "Flow" is the user-facing word for a diagram in this feature.</li>
+<li><strong>Link</strong> — a node's pointer to another flow's id (<code>Block.linkTo</code>).</li>
+<li><strong>Door</strong> — a node that has a <code>linkTo</code> set. Rendered with a visible link affordance.</li>
+<li><strong>Starter flow</strong> — a curated flow that ships bundled in the app as data. Read-only when viewed; forked to edit.</li>
+<li><strong>Back history</strong> — the browser-style stack of flows you followed links through; Back pops it.</li>
+</ul>
+
+<h2>Data model</h2>
+<p>One optional field is added to <code>Block</code> in <code>src/core/types.ts</code>:</p>
+<pre><code>export interface Block {
+  id: string;
+  type: BlockType;
+  text: string;
+  categoryId?: string;
+  position?: { x: number; y: number };
+  size?: { w: number; h: number };
+  /** Link/"door": id of another KnowflowDoc this node opens. Absent → normal node. */
+  linkTo?: string;
+}</code></pre>
+<p>Rationale for a node-level id reference (vs. embedding a sub-diagram, or a separate map artifact):</p>
+<ul>
+<li>Flows are already self-contained documents with stable ids in a shared library. A link is just one document referencing another — near-zero new machinery.</li>
+<li>Gives the <strong>web</strong> shape for free: any node → any flow, a shared flow (e.g. "escalate to tier 2") linkable from many places, cycles allowed, orphans fine.</li>
+<li>Every renderer/exporter/validator keeps working unchanged because each flow is still a plain <code>KnowflowDoc</code>.</li>
+</ul>
+<h3>Broken links</h3>
+<p>A <code>linkTo</code> whose target id resolves to nothing (bundled flow removed, deleted library doc) is a <strong>soft</strong> condition, never a crash:</p>
+<ul>
+<li>Validation surfaces it as a <strong>warning</strong> (<code>ValidationError</code> with a <code>link/*</code> code), not a hard error — flows with a broken link still render and save.</li>
+<li>The door renders in a muted "broken link" state and following it is a no-op with a small inline notice.</li>
+</ul>
+
+<h2>Bundled starter content</h2>
+<p>Curated flows ship as data in the repo, load with <strong>zero backend</strong>, and appear alongside stored flows.</p>
+<ul>
+<li><strong><code>src/library/starterFlows.ts</code></strong> — exports <code>STARTER_FLOWS: KnowflowDoc[]</code>. Each has a <strong>stable reserved id</strong> using a <code>starter:</code> prefix (e.g. <code>starter:password-changed</code>, <code>starter:2fa</code>) so links between starter flows resolve deterministically and never collide with generated ids.</li>
+<li><strong><code>src/library/flows.ts</code></strong> — a thin resolver layer over <code>src/data/library.ts</code> that the editor uses instead of calling <code>library.ts</code> directly:
+  <ul>
+  <li><code>listFlows()</code> → starter summaries (flagged <code>starter: true</code>) <strong>+</strong> stored <code>DocSummary[]</code>.</li>
+  <li><code>resolveFlow(id)</code> → returns the starter flow if <code>id</code> starts with <code>starter:</code>, else delegates to <code>getDoc(id)</code>.</li>
+  <li>Save/delete continue to target <code>library.ts</code> and are <strong>rejected for <code>starter:</code> ids</strong> (bundled flows are read-only; see below).</li>
+  </ul>
+</li>
+<li>The Diagrams panel groups the list: a <strong>"Starter flows"</strong> section (from <code>STARTER_FLOWS</code>) above <strong>"Your flows"</strong> (stored). Starter rows carry a small badge and have no delete button.</li>
+</ul>
+<h3>Seed content (initial)</h3>
+<p>Ship at least one real, linked pair so link-following is demonstrable on day one:</p>
+<ul>
+<li><code>starter:password-changed</code> — the Password-Changed troubleshooting flow. Its <code>2FA</code> outcome node has <code>linkTo: 'starter:2fa'</code>.</li>
+<li><code>starter:2fa</code> — the 2FA sub-procedure as its own flow.</li>
+</ul>
+<p>The user authors additional starter flows over time (by building them in-app and promoting the exported JSON into <code>starterFlows.ts</code>, or by hand).</p>
+
+<h2>Editing bundled flows — copy to edit</h2>
+<p>Starter flows are <strong>read-only when viewed</strong>; the canonical set stays pristine and a fresh instance always resets clean.</p>
+<ul>
+<li>When the active flow is a starter (<code>id</code> starts with <code>starter:</code>), the editor is in a <strong>read-only view</strong>: Palette and destructive/edit controls are disabled or hidden, autosave is off.</li>
+<li>A prominent <strong>"Make an editable copy"</strong> action forks it: deep-clone → assign a fresh non-<code>starter:</code> id → title <code>"&lt;title&gt; (copy)"</code> → <code>meta.status = 'draft'</code> → save to the library → open the copy. The copy's <code>linkTo</code> values are left pointing at their original targets (a copy can still link to canonical starter flows).</li>
+</ul>
+
+<h2>Navigation — follow &amp; back</h2>
+<p>Following a link swaps the canvas to the target flow; Back returns. Browser-style history handles loops and shared flows with no special-casing.</p>
+<ul>
+<li>Editor state gains a <strong>history stack</strong> of visited flow ids. <code>EditorScreen</code> owns it.</li>
+<li><strong>Follow:</strong> activating a door resolves <code>linkTo</code> via <code>resolveFlow</code>, pushes the current flow id onto the stack, and loads the target as the active flow. Following a broken/missing target does nothing but show the inline notice.</li>
+<li><strong>Back:</strong> pops the stack and loads the previous flow. Hidden/disabled when the stack is empty.</li>
+<li>Opening a flow directly from the Diagrams panel <strong>clears</strong> the history (fresh starting point), matching the "pick a flow to start" mental model.</li>
+<li>Autosave already persists edits to owned flows before you navigate away; starter flows are read-only so navigating away from them is clean.</li>
+</ul>
+<h3>Door affordance &amp; the edit/follow distinction</h3>
+<p>In the editor a plain node click <strong>selects</strong> for editing, so following needs its own control (not a bare click):</p>
+<ul>
+<li>A door node renders a visible link affordance — a small <strong>"↗ open"</strong> control / link icon on the node plus distinct styling — so it reads as a doorway.</li>
+<li>Activating that control (click / Enter) follows the link. Plain-clicking the node still selects it (so you can edit its text or change its target).</li>
+<li><em>(Later option, not in this spec: a read-only "Follow mode" for agents working a live call, where the whole node is clickable-to-follow. The affordance above is forward-compatible with it.)</em></li>
+</ul>
+
+<h2>Authoring links</h2>
+<p>On flows you own (non-starter), the <strong>Inspector</strong> gains a <strong>"Links to flow →"</strong> control:</p>
+<ul>
+<li>A picker listing other flows (starter + your own, excluding the current flow) to set <code>Block.linkTo</code>, plus a <strong>"None"</strong> option to clear it.</li>
+<li>Setting/clearing a link is a normal edit operation (autosaved, undoable via existing history).</li>
+<li>No new preset vocabulary — any block type can become a door.</li>
+</ul>
+
+<h2>What stays untouched</h2>
+<ul>
+<li><code>src/core/types.ts</code> — only the additive <code>linkTo?</code> field.</li>
+<li>Presets, validators (except an additive soft link-warning), layout, renderers, exporters, <code>useDocHistory</code>, autosave: unchanged in behavior.</li>
+<li><code>src/data/library.ts</code> and the <code>/api/*</code> functions: unchanged. The new <code>flows.ts</code> resolver wraps them; it does not modify them.</li>
+<li>Supabase, auth, deploy: untouched.</li>
+</ul>
+
+<h2>Build order</h2>
+<p><strong>Slice 1 — fixes barren-ness (the day-one win):</strong></p>
+<ol>
+<li><code>Block.linkTo</code> field + soft broken-link validation.</li>
+<li><code>starterFlows.ts</code> (the Password-Changed ↔ 2FA pair) + <code>flows.ts</code> resolver.</li>
+<li>Diagrams panel lists starter flows (grouped, badged, no delete).</li>
+<li>Door affordance on linked nodes + follow control + Back history.</li>
+<li>Starter flows open read-only (no fork yet — just view + navigate).</li>
+</ol>
+<p><strong>Slice 2 — author &amp; extend:</strong></p>
+<ol start="6">
+<li>Inspector "Links to flow →" picker (set/clear on owned flows).</li>
+<li>"Make an editable copy" fork.</li>
+<li>Broken-link render/notice polish.</li>
+</ol>
+<p><strong>Deferred (noted, not built):</strong> flow-level "related flows" list · bird's-eye map (derived from links) · links in the accessible view (blocked on that view existing).</p>
+
+<h2>Testing</h2>
+<ul>
+<li><strong><code>core</code>:</strong> <code>linkTo</code> round-trips through serialize/persistence; validation flags a broken <code>linkTo</code> as a warning (not an error); setting/clearing <code>linkTo</code> via the edit operation.</li>
+<li><strong><code>library/flows</code>:</strong> <code>listFlows</code> merges starter + stored; <code>resolveFlow</code> returns starter by prefix and delegates otherwise; save/delete reject <code>starter:</code> ids.</li>
+<li><strong>Navigation:</strong> follow pushes history and swaps active flow; Back pops; opening from the panel clears history; following a broken link is a no-op.</li>
+<li><strong>Fork:</strong> copy of a starter flow gets a fresh id, <code>(copy)</code> title, draft status, is saved, and retains its <code>linkTo</code> targets.</li>
+<li>Existing suite (77 tests) stays green; <code>tsc -b</code> + <code>vite build</code> clean.</li>
+</ul>
+</div></body>
+</html>

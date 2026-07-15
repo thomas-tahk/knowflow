@@ -4,6 +4,7 @@ import { exportJson, importJson } from './serialize';
 import { createDoc } from './createDoc';
 import { addBlock } from './operations';
 import type { Clock } from './ids';
+import type { KnowflowDoc } from './types';
 
 const clock: Clock = { newId: (() => { let n = 0; return () => `id${++n}`; })(), nowIso: () => '2026-06-12T00:00:00.000Z' };
 
@@ -42,5 +43,17 @@ describe('serialize', () => {
   it('rejects a document with a non-object element in "blocks" without throwing', () => {
     const result = importJson(JSON.stringify({ id: 'x', title: 'T', preset: 'flowchart', blocks: [null], connections: [], meta: { createdAt: 'x', updatedAt: 'x', status: 'draft', version: 1 } }));
     expect(result.ok).toBe(false);
+  });
+
+  it('preserves a block linkTo through export → import', () => {
+    const doc: KnowflowDoc = {
+      id: 'd1', title: 'T', preset: 'flowchart',
+      blocks: [{ id: 'b1', type: 'step', text: 'go', linkTo: 'starter:2fa' }],
+      connections: [],
+      meta: { createdAt: 'x', updatedAt: 'x', status: 'draft', version: 1 },
+    };
+    const result = importJson(exportJson(doc));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.doc.blocks[0].linkTo).toBe('starter:2fa');
   });
 });

@@ -19,6 +19,8 @@ export interface Block {
   position?: { x: number; y: number };
   /** Manual size override. Absent → shape default. */
   size?: { w: number; h: number };
+  /** Link/"door": id of another KnowflowDoc this node opens. Absent → normal node. */
+  linkTo?: string;
 }
 
 export interface Connection {

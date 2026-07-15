@@ -9,6 +9,9 @@ export interface KnowflowNodeData extends Record<string, unknown> {
   /** Set by the editable canvas so the node shows resize handles + commits resizes. */
   editable?: boolean;
   onResize?: (width: number, height: number) => void;
+  /** Set when this block is a door (Block.linkTo) — clicking the affordance follows it. */
+  linkTo?: string;
+  onFollow?: (targetId: string) => void;
 }
 
 const MARKER = { type: MarkerType.ArrowClosed, width: 18, height: 18, color: '#B6AC9B' };
@@ -24,7 +27,7 @@ function nodesFor(doc: KnowflowDoc, positions: Positions): Node<KnowflowNodeData
       width,
       height,
       deletable: false, // nodes are deleted via the inspector, not the keyboard
-      data: { blockType: b.type, text: b.text },
+      data: { blockType: b.type, text: b.text, linkTo: b.linkTo },
     };
   });
 }

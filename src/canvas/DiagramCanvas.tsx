@@ -28,11 +28,12 @@ interface Props {
   onResize?: (blockId: string, size: { w: number; h: number }) => void;
   onConnect?: (from: string, to: string) => void;
   onDeleteConnection?: (edgeId: string) => void;
+  onFollow?: (targetId: string) => void;
 }
 
 function Inner(props: Props) {
   const { doc, editable = false, connectable = false, connectMode = false, focusId, selectedId, selectedEdgeId,
-    onSelect, onSelectEdge, onMove, onResize, onConnect, onDeleteConnection } = props;
+    onSelect, onSelectEdge, onMove, onResize, onConnect, onDeleteConnection, onFollow } = props;
   const { fitView } = useReactFlow();
   const [pending, setPending] = useState<string | null>(null);
   // Clear the in-progress connection when leaving connect mode. Done during render via
@@ -52,11 +53,13 @@ function Inner(props: Props) {
     derived.nodes.map(n => ({
       ...n,
       selected: n.id === selectedId,
-      data: editable
-        ? { ...n.data, editable: true, onResize: (w: number, h: number) => onResize?.(n.id, { w, h }) }
-        : n.data,
+      data: {
+        ...n.data,
+        onFollow,
+        ...(editable ? { editable: true, onResize: (w: number, h: number) => onResize?.(n.id, { w, h }) } : {}),
+      },
     })),
-    [derived.nodes, editable, onResize, selectedId],
+    [derived.nodes, editable, onResize, onFollow, selectedId],
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes);

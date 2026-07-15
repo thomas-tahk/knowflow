@@ -31,3 +31,13 @@
 }
 .dp-doc:hover .dp-del { color: #8A4632; }
 .dp-del:hover { background: #F6E7E2; }
+
+.dp-group {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted, #978D7C);
+  margin: 14px 4px 4px;
+}
+.dp-group:first-of-type { margin-top: 8px; }

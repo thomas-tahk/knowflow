@@ -7,8 +7,8 @@ import {
   addBlock, addConnection, removeConnection, setConnectionLabel,
   moveBlock, resizeBlock, resetLayout, renameDoc, setDescription, clearDoc,
 } from '../core/operations';
-import type { DocSummary } from '../core/persistence';
-import { listDocs, getDoc, saveDoc, removeDoc, ConflictError } from '../data/library';
+import { getDoc, saveDoc, removeDoc, ConflictError } from '../data/library';
+import { listFlows, resolveFlow, isStarter, type FlowSummary } from '../library/flows';
 import { DiagramCanvas } from '../canvas/DiagramCanvas';
 import { FishboneCanvas } from '../canvas/FishboneCanvas';
 import { Palette } from './Palette';
@@ -24,7 +24,8 @@ import './EditorScreen.css';
 
 export function EditorScreen() {
   const { doc, setDoc, resetDoc, undo, redo, canUndo, canRedo } = useDocHistory(createDoc('flowchart', 'Untitled'));
-  const [library, setLibrary] = useState<DocSummary[]>([]);
+  const [library, setLibrary] = useState<FlowSummary[]>([]);
+  const [history, setHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -46,12 +47,13 @@ export function EditorScreen() {
   // Keep the library list in sync after a save/rename without re-fetching every keystroke.
   const upsertSummary = useCallback((d: KnowflowDoc) => {
     setLibrary(prev => [
-      { id: d.id, title: d.title, preset: d.preset, status: d.meta.status, updatedAt: d.meta.updatedAt },
+      { id: d.id, title: d.title, preset: d.preset, status: d.meta.status, updatedAt: d.meta.updatedAt, starter: false },
       ...prev.filter(s => s.id !== d.id),
     ]);
   }, []);
 
   const save = useCallback(async (d: KnowflowDoc) => {
+    if (isStarter(d.id)) return; // starter flows are read-only
     try {
       await saveDoc(d, lastSynced.current ?? undefined);
       lastSynced.current = d.meta.updatedAt;
@@ -68,15 +70,12 @@ export function EditorScreen() {
   useEffect(() => {
     if (booted.current) return; booted.current = true;
     (async () => {
-      let list = await listDocs();
-      if (list.length) {
-        const d = await getDoc(list[0].id);
+      const list = await listFlows();
+      const mine = list.filter(f => !f.starter).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+      const first = mine[0] ?? list.find(f => f.starter);
+      if (first) {
+        const d = await resolveFlow(first.id);
         if (d) { resetDoc(d); lastSynced.current = d.meta.updatedAt; }
-      } else {
-        const blank = createDoc('flowchart', 'Untitled');
-        await saveDoc(blank);
-        resetDoc(blank); lastSynced.current = blank.meta.updatedAt;
-        list = await listDocs();
       }
       setLibrary(list);
       setLoading(false);
@@ -93,15 +92,28 @@ export function EditorScreen() {
     await saveDoc(doc, undefined); // unconditional overwrite
     lastSynced.current = doc.meta.updatedAt; upsertSummary(doc); setConflict(false);
   };
-  const newBlank = (preset: Preset) => { const d = createDoc(preset, 'Untitled'); switchTo(d); upsertSummary(d); };
-  const openSaved = async (id: string) => { const d = await getDoc(id); if (d) switchTo(d); };
+  const newBlank = (preset: Preset) => { const d = createDoc(preset, 'Untitled'); switchTo(d); upsertSummary(d); setHistory([]); };
+  const openFlow = async (id: string) => { const d = await resolveFlow(id); if (d) { switchTo(d); setHistory([]); } };
+  const follow = async (targetId: string) => {
+    const target = await resolveFlow(targetId);
+    if (!target) return; // broken/missing link: safe no-op
+    setHistory(h => [...h, doc.id]);
+    switchTo(target);
+  };
+  const goBack = async () => {
+    if (!history.length) return;
+    const prevId = history[history.length - 1];
+    setHistory(h => h.slice(0, -1));
+    const d = await resolveFlow(prevId);
+    if (d) switchTo(d);
+  };
   const handleDeleteDoc = async (id: string) => {
     const summary = library.find(s => s.id === id);
     if (!window.confirm(`Delete "${summary?.title || 'this diagram'}"? This can't be undone.`)) return;
     await removeDoc(id);
     const rest = library.filter(s => s.id !== id);
     setLibrary(rest);
-    if (id === doc.id) { if (rest.length) openSaved(rest[0].id); else newBlank('flowchart'); }
+    if (id === doc.id) { if (rest.length) openFlow(rest[0].id); else newBlank('flowchart'); }
   };
   const clearCanvas = () => {
     if (!window.confirm('Clear this diagram? All blocks will be removed.')) return;
@@ -181,6 +193,9 @@ export function EditorScreen() {
         <div className="topbar-left">
           <span className="brand">know<b>flow</b></span>
           <span className="preset-tag">{getPreset(doc.preset).name}</span>
+          {history.length > 0 && (
+            <button className="tbtn" onClick={goBack} title="Back to the flow you came from">← Back</button>
+          )}
         </div>
 
         <div className="topbar-center">
@@ -242,6 +257,7 @@ export function EditorScreen() {
               onResize={handleResize}
               onConnect={handleCanvasConnect}
               onDeleteConnection={handleDeleteConnection}
+              onFollow={follow}
             />
           )}
 
@@ -261,7 +277,7 @@ export function EditorScreen() {
               <DiagramsPanel
                 docs={[...library].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))}
                 activeId={doc.id}
-                onOpen={openSaved}
+                onOpen={openFlow}
                 onNew={newBlank}
                 onGenerate={() => setShowGenerate(true)}
                 onDelete={handleDeleteDoc}

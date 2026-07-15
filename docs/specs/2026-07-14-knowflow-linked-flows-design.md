@@ -70,21 +70,27 @@ A `linkTo` whose target id resolves to nothing (bundled flow removed, deleted li
 
 Curated flows ship as data in the repo, load with **zero backend**, and appear alongside stored flows.
 
-- **`src/library/starterFlows.ts`** — exports `STARTER_FLOWS: KnowflowDoc[]`. Each has a **stable reserved id** using a `starter:` prefix (e.g. `starter:password-changed`, `starter:2fa`) so links between starter flows resolve deterministically and never collide with generated ids.
+- **`src/library/starterFlows.ts`** — exports `STARTER_FLOWS: KnowflowDoc[]`. Each has a **stable reserved id** using a `starter:` prefix (e.g. `starter:reset-password`, `starter:2fa`) so links between starter flows resolve deterministically and never collide with generated ids.
 - **`src/library/flows.ts`** — a thin resolver layer over `src/data/library.ts` that the editor uses instead of calling `library.ts` directly:
   - `listFlows()` → starter summaries (flagged `starter: true`) **+** stored `DocSummary[]`.
   - `resolveFlow(id)` → returns the starter flow if `id` starts with `starter:`, else delegates to `getDoc(id)`.
   - Save/delete continue to target `library.ts` and are **rejected for `starter:` ids** (bundled flows are read-only; see below).
 - The Diagrams panel groups the list: a **"Starter flows"** section (from `STARTER_FLOWS`) above **"Your flows"** (stored). Starter rows carry a small badge and have no delete button.
 
-### Seed content (initial)
+### Seed content (initial batch — confirmed 2026-07-15)
 
-Ship at least one real, linked pair so link-following is demonstrable on day one:
+Four real, interlinked flows ship in the first batch. Full node/branch/link structure is in **Appendix A**; slugs and link relationships:
 
-- `starter:password-changed` — the Password-Changed troubleshooting flow. Its `2FA` outcome node has `linkTo: 'starter:2fa'`.
-- `starter:2fa` — the 2FA sub-procedure as its own flow.
+| Slug | Title | Links out to |
+|---|---|---|
+| `starter:verification` | Verification | *(shared/reusable — linked into by others)* |
+| `starter:reset-password` | Reset Password | `starter:verification` |
+| `starter:2fa` | 2FA — Google 2-Step | `starter:verification`, `starter:set-no2fa-ou` |
+| `starter:set-no2fa-ou` | Set OU to No2FA | *(shared/reusable — linked into by 2FA)* |
 
-The user authors additional starter flows over time (by building them in-app and promoting the exported JSON into `starterFlows.ts`, or by hand).
+**Verification** and **Set OU to No2FA** are deliberately factored out as small reusable flows that others link into — the pattern the wider web will follow.
+
+**This is a batch, not the ceiling.** More starter flows (printing, and a broader "Big Password Issues" triage hub that links out to these) are expected over time. The architecture is built so adding one = appending a `KnowflowDoc` to `STARTER_FLOWS` plus a link or two — it never requires touching existing flows. See *Maintaining & extending starter flows* below.
 
 ## Editing bundled flows — copy to edit
 
@@ -92,6 +98,20 @@ Starter flows are **read-only when viewed**; the canonical set stays pristine an
 
 - When the active flow is a starter (`id` starts with `starter:`), the editor is in a **read-only view**: Palette and destructive/edit controls are disabled or hidden, autosave is off.
 - A prominent **"Make an editable copy"** action forks it: deep-clone → assign a fresh non-`starter:` id → title `"<title> (copy)"` → `meta.status = 'draft'` → save to the library → open the copy. The copy's `linkTo` values are left pointing at their original targets (a copy can still link to canonical starter flows).
+
+## Maintaining & extending starter flows
+
+Starter flows are living procedures — they change (a vendor renames a button, a policy shifts) and the set grows. Two supported edit paths, plus one helper that makes structural edits painless:
+
+- **Small text tweaks** → edit the node's string directly in `starterFlows.ts` and push. One-liner.
+- **Structural changes / new procedures** → **fork → edit visually → export → paste → push**: "Make an editable copy" of the starter, edit it with the full editor, then **"Export as starter"** (below) to get the updated data, paste it over that entry in `starterFlows.ts`, and push.
+- **Adding a whole new starter flow** (printing, a "Big Password Issues" triage hub, etc.) → author it in-app, "Export as starter", append the entry to `STARTER_FLOWS`, wire its `linkTo`s. **Existing flows are never touched** — the web grows by addition.
+
+Push auto-deploys (Vercel watches `main`), so the loop ends at "push." Every change is a git commit — a version history and rollback for the canonical procedures, for free.
+
+### "Export as starter" helper
+
+A small action (in the ⋯ More menu) on any flow: serializes the active flow via the existing `exportJson`, prompts for a slug (`printing` → `starter:printing`), rewrites the `id` to that `starter:` slug, and copies a ready-to-paste `STARTER_FLOWS` entry to the clipboard. This is what keeps structural editing visual instead of hand-written JSON. Trades off nothing existing — it's a read-only convenience over `exportJson`.
 
 ## Navigation — follow & back
 
@@ -130,7 +150,7 @@ On flows you own (non-starter), the **Inspector** gains a **"Links to flow →"*
 
 **Slice 1 — fixes barren-ness (the day-one win):**
 1. `Block.linkTo` field + soft broken-link validation.
-2. `starterFlows.ts` (the Password-Changed ↔ 2FA pair) + `flows.ts` resolver.
+2. `starterFlows.ts` (the four confirmed flows — Appendix A) + `flows.ts` resolver.
 3. Diagrams panel lists starter flows (grouped, badged, no delete).
 4. Door affordance on linked nodes + follow control + Back history.
 5. Starter flows open read-only (no fork yet — just view + navigate).
@@ -138,7 +158,8 @@ On flows you own (non-starter), the **Inspector** gains a **"Links to flow →"*
 **Slice 2 — author & extend:**
 6. Inspector "Links to flow →" picker (set/clear on owned flows).
 7. "Make an editable copy" fork.
-8. Broken-link render/notice polish.
+8. "Export as starter" helper (the extend-the-set loop).
+9. Broken-link render/notice polish.
 
 **Deferred (noted, not built):** flow-level "related flows" list · bird's-eye map (derived from links) · links in the accessible view (blocked on that view existing).
 
@@ -149,3 +170,57 @@ On flows you own (non-starter), the **Inspector** gains a **"Links to flow →"*
 - **Navigation:** follow pushes history and swaps active flow; Back pops; opening from the panel clears history; following a broken link is a no-op.
 - **Fork:** copy of a starter flow gets a fresh id, `(copy)` title, draft status, is saved, and retains its `linkTo` targets.
 - Existing suite (77 tests) stays green; `tsc -b` + `vite build` clean.
+
+## Appendix A — confirmed starter flow structures
+
+All four render as the **flowchart** preset. Node kinds below map to flowchart block types (`step` / `decision` / `outcome`). "→ **DOOR** `starter:x`" marks a node whose `linkTo` is set. Wording is the confirmed content; the executor encodes it verbatim into `starterFlows.ts` (assigning ids, connections, and auto-layout positions).
+
+### `starter:verification` — "Verification" *(shared)*
+- **decision** "Staff, or Student / Parent?"
+  - *Staff* → **step** "Get name and eNumber (ID), plus ONE of: Department / Location, or previous ticket info" → *(to the gate)*
+  - *Student / Parent* → **step** "Get student ID and student name" → **decision** "Who is actually on the call?"
+    - *Student* → **step** "Get school and grade" → *(to the gate)*
+    - *Parent* → **step** "Get parent name, email, home address (also ask school and grade)" → *(to the gate)*
+    - *Staff for a student* → **step** "Also verify them as Staff" → *(into the Staff step above)*
+- **decision** (the gate) "Could the customer provide the required info?"
+  - *Yes* → **outcome** "Identity verified → return to your flow"
+  - *No — verify in person* → **decision** "Can the customer visit Tech Oasis in person?"
+    - *Yes* → **outcome** "Refer out to Tech Oasis (customer goes there in person)"
+    - *No* → **outcome** "Refer out to a field tech (tech visits the customer)"
+  - *No — will follow up* → **outcome** "Customer gathers info and calls back later (or gives up)"
+
+### `starter:reset-password` — "Reset Password"
+- **step** "Verify caller identity" → **DOOR** `starter:verification`
+- **step** "Reset to the monthly default (temporary) password at directory.aps.edu/rDirectory"
+- **step** (P) "Customer opens pwreset.aps.edu and clicks 'Change my password'"
+- **step** "1 · CAPTCHA (word on desktop / math on mobile)"
+- **step** "2 · Log in (username + temporary password)"
+- **step** "3 · Set new password (meets requirements; no personal info; not a reused password)"
+- **decision** "Submit"
+  - *Success* → **outcome** "Password has been changed (confirmation message)"
+  - *Failed, first time* → *(loop back to step P, 'Change my password')*
+  - *Failed again (2nd+)* → **step** "Set a PERMANENT password directly in rDirectory (skip pwreset; UNCHECK 'Change password upon next login')" → **outcome** "Password has been changed"
+
+### `starter:2fa` — "2FA — Google 2-Step"
+- **step** "Verify caller identity" → **DOOR** `starter:verification`
+- **decision** "Is 2FA OFF or ON? (check in Google Admin)"
+  - *OFF* → **decision** "New employee?"
+    - *Yes* → **step** "Enroll for 2-Step Verification (first-time login only)" → *(into step S below)*
+    - *No* → **step** "Set OU to No2FA" → **DOOR** `starter:set-no2fa-ou` → **step** "Turn OFF Login Challenge (~10 min)" → **step** (N) "Profile icon → Manage Google Account → Security → 2-Step Verification (may re-enter password)" → **step** (S) "Under 'Second steps' → Phone → add backup phone → Next → Save → (maybe Approve)" → **step** "Return (←) to the 2-Step Verification page" → **step** "Turn ON 2-Step Verification"
+      - *Confirmed* → **step** "'You are now protected with 2-Step Verification'" → *(to Restore)*
+      - *Not working* → **step** "Restart browser and retry; remote in if you can" → *(loop back to step N)*
+  - *ON* → **step** "Set OU to No2FA" → **DOOR** `starter:set-no2fa-ou` → **step** "Google Admin → Security → 2-Step Verification → try to set it OFF (wait a few minutes)"
+    - *Can turn OFF* → *(into 'Turn OFF Login Challenge' in the OFF path)*
+    - *Cannot turn OFF* → **step** "Get Backup Verification Codes" → **step** "Give the customer one 8-digit backup code" → **step** "Guide: 'Try another way' at the prompt → enter the code" → **step** "Open the 2-Step Verification page → 'Phones' under Second steps" → **step** "Add new phone (remove old if needed) → green check" → **step** "Phone updated" → *(to Restore)*
+- **step** (Restore) "Set the OU back to the ORIGINAL (the one you noted at the start)" — both success paths flow through here
+- **outcome** "Done — resolved and OU restored"
+
+> Note for the executor: the two resolution confirmations ("now protected", "phone updated") are **step** nodes, not terminal outcomes — they have an outgoing edge into Restore. The only terminal outcome is "Done — resolved and OU restored."
+
+### `starter:set-no2fa-ou` — "Set OU to No2FA" *(shared)*
+- **step** "Note the original Org Unit (OU)"
+- **step** "Change OU to: aps.edu › Staff › GoogleNoSync › No2FA"
+- **step** "Refresh the page to confirm the OU updated"
+- **outcome** "OU set → return to your flow"
+
+*(Restoring the original OU lives at the end of the 2FA flow, not here — this sub-flow only sets it to No2FA. If many future flows change the OU, a paired "Restore original OU" sub-flow can be extracted later.)*

@@ -43,6 +43,7 @@ export function EditorScreen() {
   const isFishbone = doc.preset === 'fishbone';
   const connectable = doc.preset === 'flowchart' || doc.preset === 'decisionTree';
   const errors = useMemo(() => getPreset(doc.preset).validate(doc), [doc]);
+  const readOnly = isStarter(doc.id);
 
   // Keep the library list in sync after a save/rename without re-fetching every keystroke.
   const upsertSummary = useCallback((d: KnowflowDoc) => {
@@ -199,39 +200,47 @@ export function EditorScreen() {
         </div>
 
         <div className="topbar-center">
-          <input className="doc-title" value={doc.title} placeholder="Untitled diagram"
+          <input className="doc-title" value={doc.title} placeholder="Untitled diagram" readOnly={readOnly}
             aria-label="Diagram title" onChange={e => setDoc(renameDoc(doc, e.target.value))} />
-          <input className="doc-desc" value={doc.description ?? ''} placeholder="Add a description — what is this & when do you use it?"
+          <input className="doc-desc" value={doc.description ?? ''} placeholder="Add a description — what is this & when do you use it?" readOnly={readOnly}
             aria-label="Diagram description" onChange={e => setDoc(setDescription(doc, e.target.value))} />
         </div>
 
         <div className="topbar-right">
           <button className="tbtn icon" onClick={undo} disabled={!canUndo} title="Undo (⌘/Ctrl+Z)">↶</button>
           <button className="tbtn icon" onClick={redo} disabled={!canRedo} title="Redo (⌘/Ctrl+Shift+Z)">↷</button>
-          {connectable && (
+          {connectable && !readOnly && (
             <button className={`tbtn ${connectMode ? 'active' : ''}`} onClick={() => setConnectMode(m => !m)}
               title="Connect blocks: click a start, then an end. Shortcut: C">
               {connectMode ? 'Connecting…' : 'Connect'}
             </button>
           )}
-          <span className={`save save-${status}`} role="status" aria-live="polite"
-            title="Your changes save automatically to the shared library.">
-            {status === 'saving' ? 'Saving…' : status === 'error' ? '⚠ Not saved' : 'Saved ✓'}
-          </span>
+          {readOnly ? (
+            <span className="save save-readonly" title="Starter flows are read-only.">Starter · read-only</span>
+          ) : (
+            <span className={`save save-${status}`} role="status" aria-live="polite"
+              title="Your changes save automatically to the shared library.">
+              {status === 'saving' ? 'Saving…' : status === 'error' ? '⚠ Not saved' : 'Saved ✓'}
+            </span>
+          )}
 
           <div className="more-wrap">
             <button className="tbtn" onClick={() => setMoreOpen(o => !o)}
               aria-haspopup="true" aria-expanded={moreOpen} title="More actions">⋯ More</button>
             {moreOpen && (
               <div className="more-menu" onMouseLeave={() => setMoreOpen(false)}>
-                <button onClick={() => { setDoc(resetLayout(doc)); setMoreOpen(false); }}
-                  title="Snap blocks back to the neat automatic layout — your content stays.">Tidy up layout</button>
+                {!readOnly && (
+                  <button onClick={() => { setDoc(resetLayout(doc)); setMoreOpen(false); }}
+                    title="Snap blocks back to the neat automatic layout — your content stays.">Tidy up layout</button>
+                )}
                 <button onClick={() => doExport('png')}>Download PNG</button>
                 <button onClick={() => doExport('pdf')}>Download PDF</button>
                 <FeedbackButton className="more-item" label="💬 Send feedback" onOpen={() => setMoreOpen(false)}
                   context={`${getPreset(doc.preset).name} · ${doc.title || 'Untitled'}`} />
-                <button className="danger" onClick={() => { setMoreOpen(false); clearCanvas(); }}
-                  title="Remove every block (asks first).">Clear all blocks</button>
+                {!readOnly && (
+                  <button className="danger" onClick={() => { setMoreOpen(false); clearCanvas(); }}
+                    title="Remove every block (asks first).">Clear all blocks</button>
+                )}
               </div>
             )}
           </div>
@@ -245,7 +254,7 @@ export function EditorScreen() {
           ) : (
             <DiagramCanvas
               doc={doc}
-              editable
+              editable={!readOnly}
               connectable={connectable}
               connectMode={connectMode}
               focusId={focusId}
@@ -296,7 +305,12 @@ export function EditorScreen() {
               <button className="panel-collapse" title="Hide" onClick={() => setRightOpen(false)}>▸</button>
             </div>
             <div className="panel-body">
-              {selectedEdgeId ? (
+              {readOnly ? (
+                <div className="ro-note">
+                  <p><b>Starter flow — read-only.</b></p>
+                  <p>This is a curated reference flow. Editing your own copy comes next; for now, follow the ↗ links and use Back to return.</p>
+                </div>
+              ) : selectedEdgeId ? (
                 <EdgeInspector
                   doc={doc}
                   edgeId={selectedEdgeId}

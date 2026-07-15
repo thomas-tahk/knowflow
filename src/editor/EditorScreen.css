@@ -118,3 +118,7 @@
 .conflict-take:hover { border-color: #0F766E; color: #0F766E; }
 .conflict-keep { border: 1px solid #0F766E; background: #0F766E; color: #fff; }
 .conflict-keep:hover { background: #0d655e; }
+
+.ro-note { padding: 14px 16px; color: var(--ink2, #5C564B); font-size: 14px; }
+.ro-note p { margin: 0 0 10px; }
+.save-readonly { color: var(--muted, #978D7C); font-style: italic; }

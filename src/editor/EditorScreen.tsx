@@ -194,9 +194,6 @@ export function EditorScreen() {
         <div className="topbar-left">
           <span className="brand">know<b>flow</b></span>
           <span className="preset-tag">{getPreset(doc.preset).name}</span>
-          {history.length > 0 && (
-            <button className="tbtn" onClick={goBack} title="Back to the flow you came from">← Back</button>
-          )}
         </div>
 
         <div className="topbar-center">
@@ -269,6 +266,15 @@ export function EditorScreen() {
               onFollow={follow}
             />
           )}
+
+          {history.length > 0 && (
+            <button className="flow-backbar" onClick={goBack}>
+              <span className="flow-backbar-arrow" aria-hidden="true">←</span>
+              Back to <b>{library.find(s => s.id === history[history.length - 1])?.title ?? 'previous flow'}</b>
+            </button>
+          )}
+
+          <div className="canvas-hint" aria-hidden="true">Scroll to zoom · drag to pan</div>
 
           {connectMode && (
             <div className="connect-banner">Connect mode — click a start block, then an end block. <b>C</b> or <b>Esc</b> to exit.</div>

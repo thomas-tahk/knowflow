@@ -2,7 +2,7 @@ import type { KnowflowDoc } from '../core/types';
 import { graphLayout, graphLayoutFull, type Positions, type GraphLayout } from './graphLayout';
 import { linearLayout } from './linearLayout';
 
-export type { Positions, EdgePoints, GraphLayout } from './graphLayout';
+export type { Positions, EdgeRoute, EdgeRoutes, GraphLayout } from './graphLayout';
 
 export function layoutDoc(doc: KnowflowDoc): Positions {
   switch (doc.preset) {
@@ -25,8 +25,8 @@ export function layoutDocFull(doc: KnowflowDoc): GraphLayout {
     case 'decisionTree':
       return graphLayoutFull(doc, 'TB');
     case 'stepList':
-      return { positions: linearLayout(doc), edgePoints: {} };
+      return { positions: linearLayout(doc), edgeRoutes: {} };
     case 'fishbone':
-      return { positions: {}, edgePoints: {} };
+      return { positions: {}, edgeRoutes: {} };
   }
 }

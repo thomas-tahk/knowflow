@@ -43,8 +43,32 @@
 }
 
 /* Keep the React Flow zoom/fit controls a compact horizontal bar at bottom-center,
-   clear of the floating side panels. */
-.react-flow__controls { flex-direction: row !important; box-shadow: 0 8px 22px -14px rgba(41,40,31,.4); border-radius: 9px; overflow: hidden; }
+   clear of the floating side panels. Slightly enlarged + accent-tinted so the zoom control
+   is easy to spot (the "reminder that you can zoom"). */
+.react-flow__controls { flex-direction: row !important; box-shadow: 0 10px 26px -12px rgba(41,40,31,.5); border-radius: 10px; overflow: hidden; border: 1px solid #CDE0DC; }
+.react-flow__controls-button { width: 30px !important; height: 30px !important; }
+.react-flow__controls-button svg { max-width: 15px; max-height: 15px; }
+.react-flow__controls-button:hover { background: #E4EFEC; }
+.react-flow__controls-button svg { fill: #0F766E; }
+
+/* Prominent "you came from another flow" breadcrumb — the return path for followed links. */
+.flow-backbar {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 6;
+  display: inline-flex; align-items: center; gap: 8px;
+  font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;
+  color: #fff; background: #0F766E; border: 0; border-radius: 999px; padding: 9px 16px 9px 13px;
+  box-shadow: 0 10px 24px -12px rgba(15,118,110,.75);
+}
+.flow-backbar b { font-weight: 700; }
+.flow-backbar:hover { background: #0B5D56; }
+.flow-backbar-arrow { font-size: 17px; line-height: 1; }
+
+/* Subtle, always-on hint that the canvas is zoom/pan-able. */
+.canvas-hint {
+  position: absolute; bottom: 16px; right: 16px; z-index: 5; pointer-events: none;
+  font-size: 11.5px; font-weight: 600; color: #8A8172;
+  background: rgba(255,254,251,.82); border: 1px solid #E7DECF; border-radius: 999px; padding: 4px 11px;
+}
 .more-wrap { position: relative; }
 .more-menu {
   position: absolute; right: 0; top: 40px; background: #fff; border: 1px solid #DED3C2;

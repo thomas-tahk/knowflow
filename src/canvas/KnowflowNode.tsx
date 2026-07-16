@@ -26,7 +26,9 @@ export function KnowflowNode({ data, selected }: NodeProps<KNode>) {
       )}
       <Handle id="t" type="target" position={Position.Top} />
       <Handle id="l" type="target" position={Position.Left} />
-      <div className="kf-label">{data.text}</div>
+      {style.shape === 'diamond'
+        ? <div className="kf-diamond-inner"><span className="kf-label">{data.text}</span></div>
+        : <div className="kf-label">{data.text}</div>}
       {data.linkTo && (
         <button
           className="kf-door"

@@ -9,10 +9,26 @@
 }
 .kf-rect { border-radius: 12px; padding: 10px 14px; }
 .kf-pill { border-radius: 999px; padding: 10px 18px; }
-.kf-diamond { transform: rotate(45deg); border-radius: 14px; }
-.kf-diamond .kf-label { transform: rotate(-45deg); max-width: 120px; }
+/* Diamond: the node box (with handles at its edges) stays full-size; the visual is a tipped
+   square on an inner layer scaled to 1/√2, so its corners land exactly at the box edges instead
+   of spilling past them into neighbouring nodes/labels. */
+.kf-diamond { background: transparent; border: none; box-shadow: none; }
+.kf-diamond-inner {
+  position: absolute; top: 50%; left: 50%;
+  width: 70.71%; height: 70.71%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg); border: 1.5px solid var(--border); border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(41,40,31,.06), 0 8px 20px -14px rgba(41,40,31,.25);
+}
+.kf-diamond-inner .kf-label { transform: rotate(-45deg); max-width: 84%; }
 .kf-label { line-height: 1.25; overflow-wrap: anywhere; }
 .kf-selected { outline: 3px solid #0F766E; outline-offset: 3px; box-shadow: 0 0 0 6px rgba(15,118,110,.18); }
+/* Selection + link ring follow the tipped shape, not the transparent box. */
+.kf-diamond.kf-selected { outline: none; box-shadow: none; }
+.kf-diamond.kf-selected .kf-diamond-inner { outline: 3px solid #0F766E; outline-offset: 3px; box-shadow: 0 0 0 6px rgba(15,118,110,.18); }
+.kf-diamond.kf-has-link { box-shadow: none; }
+.kf-diamond.kf-has-link .kf-diamond-inner { box-shadow: inset 0 0 0 2px var(--border); }
 /* React Flow handles: hidden by default (read-only); visible + grabbable when editing */
 .kf-node .react-flow__handle { width: 9px; height: 9px; background: #0F766E; border: 1.5px solid #fff; opacity: 0; transition: opacity .12s; }
 .kf-editable:hover .react-flow__handle,
@@ -24,23 +40,33 @@
 .kf-resize-line { border-color: #0F766E !important; }
 .kf-resize-handle { background: #0F766E !important; border: 1.5px solid #fff !important; border-radius: 2px; width: 8px; height: 8px; }
 
+/* Door: opens a linked flow. Accent-filled and slightly oversized with a soft glow so users
+   readily read it as an actionable "enter this flow" control. */
 .kf-door {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 20px;
-  height: 20px;
+  top: -9px;
+  right: -9px;
+  width: 26px;
+  height: 26px;
   padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: #fff;
-  color: var(--border);
-  font-size: 13px;
+  border: 2px solid #fff;
+  border-radius: 8px;
+  background: #0F766E;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
   line-height: 1;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 0 0 3px rgba(15,118,110,.22), 0 4px 10px -3px rgba(41,40,31,.45);
+  animation: kf-door-pulse 2.4s ease-in-out infinite;
 }
-.kf-door:hover { background: var(--border); color: #fff; }
-.kf-has-link { box-shadow: inset 0 0 0 2px var(--border); }
+.kf-door:hover { background: #0B5D56; transform: scale(1.08); animation: none; }
+@keyframes kf-door-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(15,118,110,.22), 0 4px 10px -3px rgba(41,40,31,.45); }
+  50%      { box-shadow: 0 0 0 6px rgba(15,118,110,.10), 0 4px 10px -3px rgba(41,40,31,.45); }
+}
+/* Linked nodes get a teal ring so they stand out as doorways even before you spot the button. */
+.kf-has-link { box-shadow: inset 0 0 0 2px #0F766E, 0 8px 20px -14px rgba(41,40,31,.25); }

@@ -36,13 +36,13 @@ export function GraphEdge({ id, source, target, markerEnd, label, selected, data
   const t = useInternalNode(target);
   if (!s || !t || !s.measured.width || !t.measured.width) return null;
 
-  const points = (data as { points?: Pt[] } | undefined)?.points;
+  const route = (data as { route?: { points: Pt[]; labelPoint?: Pt } } | undefined)?.route;
   let path: string, labelX: number, labelY: number;
-  if (points && points.length >= 2) {
-    path = roundedPath(points);
-    const mid = points[Math.floor(points.length / 2)];
-    labelX = mid.x;
-    labelY = mid.y;
+  if (route && route.points.length >= 2) {
+    path = roundedPath(route.points);
+    const lp = route.labelPoint ?? route.points[Math.floor(route.points.length / 2)];
+    labelX = lp.x;
+    labelY = lp.y;
   } else {
     const { sx, sy, tx, ty, sourcePos, targetPos } = getEdgeParams(s, t);
     [path, labelX, labelY] = getSmoothStepPath({

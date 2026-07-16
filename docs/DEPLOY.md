@@ -1,6 +1,6 @@
 # knowflow — Deploy & Setup Guide
 
-Do these in order. Supabase and Google Chat give you values you'll paste into Vercel, so set them up first.
+Do these in order. Supabase and Discord give you values you'll paste into Vercel, so set them up first.
 
 You'll end up with **5 environment variables**:
 
@@ -10,7 +10,7 @@ You'll end up with **5 environment variables**:
 | `APP_PASSWORD` | the shared team password | you choose it |
 | `SUPABASE_URL` | cloud storage project URL | Supabase → Settings → API |
 | `SUPABASE_SERVICE_KEY` | cloud storage secret key | Supabase → Settings → API (service_role) |
-| `GOOGLE_CHAT_WEBHOOK_URL` | where feedback posts | Google Chat space → Webhooks |
+| `DISCORD_WEBHOOK_URL` | where feedback posts | Discord → Server Settings → Integrations → Webhooks |
 
 > Tip: to test everything locally first, put these same five in a `.env.local` file in the project root, then `npm run dev`. (`.env.local` is gitignored.)
 
@@ -44,18 +44,13 @@ You'll end up with **5 environment variables**:
 
 ---
 
-## B. Google Chat (feedback destination)
+## B. Discord (feedback destination)
 
-> Note: incoming webhooks require a **Google Workspace** account (your district one), and your Workspace admin must allow webhooks. If you don't see the option, that's the likely reason — ask your admin or use a space you own.
+> This is a one-time, ~30-second step you can do from **anywhere** (phone on cellular, home, or the Discord app) — it does not depend on your work wifi. At runtime, feedback is delivered from Vercel's servers, so a network that blocks Discord in the browser does not stop delivery.
 
-1. Open **https://chat.google.com** in a browser.
-2. Create a space for feedback (or pick an existing one): **+ → Create a space**, name it e.g. `knowflow feedback`, Create.
-3. Click the **space name** at the top → **Apps & integrations** (or **Manage webhooks**).
-4. Click **Add webhooks** (or **Webhooks → Add**).
-   - **Name:** `knowflow`
-   - (Avatar URL optional)
-   - Click **Save**.
-5. **Copy** the webhook URL it shows (starts with `https://chat.googleapis.com/v1/spaces/...`) → this is your `GOOGLE_CHAT_WEBHOOK_URL`.
+1. In a Discord server you control (create one if needed), open **Server Settings → Integrations → Webhooks**.
+2. Click **New Webhook**. Give it a name (e.g. `knowflow`) and pick the channel feedback should land in.
+3. Click **Copy Webhook URL** (starts with `https://discord.com/api/webhooks/...`) → this is your `DISCORD_WEBHOOK_URL`.
 
 ---
 
@@ -77,7 +72,7 @@ You'll end up with **5 environment variables**:
 - Click **✨ Generate**, paste a few notes, Generate → a diagram should appear (confirms `ANTHROPIC_API_KEY`).
 - Make any edit, then **reload** → it should still be there (confirms Supabase storage).
 - Open the app in a **second browser/incognito**, log in → you should see the **same** diagrams (confirms it's a shared library, not localStorage).
-- Click **💬 Feedback**, send a test note → it should appear in your Google Chat space.
+- Click **💬 Feedback**, send a test note → it should appear in your Discord channel.
 
 ---
 

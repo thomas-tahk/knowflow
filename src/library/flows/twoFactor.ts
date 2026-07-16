@@ -4,7 +4,7 @@ const AT = '2026-07-15T00:00:00.000Z';
 
 export const twoFactor: KnowflowDoc = {
   id: 'starter:2fa',
-  title: '2FA — Google 2-Step',
+  title: '2FA — Google 2-Step Verification',
   description: 'Get a user protected with Google 2-Step Verification (or fix a broken one).',
   preset: 'flowchart',
   blocks: [

@@ -47,7 +47,7 @@ export function DiagramsPanel({ docs, activeId, onOpen, onNew, onGenerate, onDel
         </>
       )}
 
-      <div className="dp-group">Your flows</div>
+      <div className="dp-group">Team flows</div>
       <div className="dp-list">
         {mine.length === 0 && <p className="dp-empty">No saved diagrams yet.</p>}
         {mine.map(row)}

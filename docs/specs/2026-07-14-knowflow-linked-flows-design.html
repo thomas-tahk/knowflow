@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>knowflow — Linked Flows (design)</title>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --paper:#F6F2EA; --ink:#29281F; --ink2:#5C564B; --muted:#978D7C;
+    --line:#E4DBCD; --accent:#0F766E; --code-bg:#FBF8F2; }
+  *{box-sizing:border-box}
+  body{ margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Hanken Grotesk",ui-sans-serif,system-ui,sans-serif; line-height:1.6; }
+  .wrap{ max-width:880px; margin:0 auto; padding:48px 28px 120px; }
+  h1,h2,h3,h4{ line-height:1.25; }
+  h1{ font-size:30px; border-bottom:2px solid var(--accent); padding-bottom:.35em; }
+  h2{ font-size:22px; margin-top:2em; border-bottom:1px solid var(--line); padding-bottom:.3em; }
+  h3{ font-size:17px; margin-top:1.6em; color:#1e3a36; }
+  h4{ font-size:14.5px; color:var(--ink2); }
+  a{ color:var(--accent); }
+  p,li{ font-size:15px; }
+  code{ font-family:"JetBrains Mono",monospace; font-size:13px; background:var(--code-bg);
+    border:1px solid var(--line); border-radius:5px; padding:1px 5px; }
+  pre{ background:var(--code-bg); border:1px solid var(--line); border-radius:12px;
+    padding:16px 18px; overflow-x:auto; }
+  pre code{ border:0; padding:0; background:none; font-size:12.5px; line-height:1.55; }
+  blockquote{ border-left:3px solid var(--accent); margin:1em 0; padding:.4em 1em;
+    background:#EAF1EF; border-radius:0 8px 8px 0; color:var(--ink2); }
+  hr{ border:0; border-top:1px solid var(--line); margin:2.5em 0; }
+  li{ margin:.2em 0; }
+  table{ border-collapse:collapse; width:100%; margin:1em 0; font-size:14px; }
+  th,td{ border:1px solid var(--line); padding:7px 10px; text-align:left; vertical-align:top; }
+  th{ background:#F0E9DC; }
+  .meta{ color:var(--ink2); font-size:14px; }
+  .meta strong{ color:var(--ink); }
+</style>
+</head>
+<body><div class="wrap">
+<h1>knowflow — Linked Flows (design)</h1>
+<p class="meta"><strong>Date:</strong> 2026-07-14 &nbsp;·&nbsp; <strong>Status:</strong> design approved, spec under review<br>
+<strong>Supersedes/extends:</strong> <code>docs/specs/2026-06-11-knowflow-design.md</code> (adds one field to the document model; changes nothing existing)</p>
+
+<h2>Why</h2>
+<p>Opening knowflow today lands you on an empty Diagrams panel — <em>"No saved diagrams yet."</em> — and a blank canvas. That barren cold-start is the real reason momentum stalled: the app asks you to do all the work before it returns any value.</p>
+<p>This feature fixes that by <strong>seeding knowflow with curated, real troubleshooting flows that are present the moment you open it</strong>, and by letting <strong>any flow link to another whole flow</strong> so those flows can be big and real without collapsing into one unreadable wall of boxes.</p>
+<p>The mental model is a <strong>web of complete flows</strong> (like linked web pages), not a hierarchy. There is no "parent/child" or "drill into a sub-diagram." A node in one flow can <em>link to</em> another flow; following the link jumps you there; a Back control returns you.</p>
+
+<h3>Success criteria</h3>
+<ul>
+<li>Open the app with an empty library and <strong>the curated starter flows are already listed</strong>, no setup, no backend.</li>
+<li>In the <strong>Password Changed</strong> flow, the <strong>2FA</strong> node is visibly a link; clicking it opens the <strong>2FA</strong> flow full-canvas.</li>
+<li>A <strong>Back</strong> control returns you to Password Changed.</li>
+<li>All of the above works with <strong>Supabase unreachable</strong> (offline).</li>
+<li>The existing editor, renderers, exporters, validators, and 77 tests are unaffected.</li>
+</ul>
+
+<h2>Non-goals (this spec)</h2>
+<ul>
+<li>Flow-level "related flows" list (links not anchored to a node). <em>Maybe later.</em></li>
+<li>A bird's-eye "map" view of the whole web. <em>Derivable from links later; not built now.</em></li>
+<li>Representing links in the accessible / read-aloud narrative view. <em>That view does not exist yet; out of scope until it does.</em></li>
+<li>Node create/connect UX friction (tracked separately — KNOWN-ISSUES #1b, #3).</li>
+<li>Any Supabase / backend change.</li>
+</ul>
+
+<h2>Domain vocabulary</h2>
+<ul>
+<li><strong>Flow</strong> — a <code>KnowflowDoc</code>. Unchanged. "Flow" is the user-facing word for a diagram in this feature.</li>
+<li><strong>Link</strong> — a node's pointer to another flow's id (<code>Block.linkTo</code>).</li>
+<li><strong>Door</strong> — a node that has a <code>linkTo</code> set. Rendered with a visible link affordance.</li>
+<li><strong>Starter flow</strong> — a curated flow that ships bundled in the app as data. Read-only when viewed; forked to edit.</li>
+<li><strong>Back history</strong> — the browser-style stack of flows you followed links through; Back pops it.</li>
+</ul>
+
+<h2>Data model</h2>
+<p>One optional field is added to <code>Block</code> in <code>src/core/types.ts</code>:</p>
+<pre><code>export interface Block {
+  id: string;
+  type: BlockType;
+  text: string;
+  categoryId?: string;
+  position?: { x: number; y: number };
+  size?: { w: number; h: number };
+  /** Link/"door": id of another KnowflowDoc this node opens. Absent → normal node. */
+  linkTo?: string;
+}</code></pre>
+<p>Rationale for a node-level id reference (vs. embedding a sub-diagram, or a separate map artifact):</p>
+<ul>
+<li>Flows are already self-contained documents with stable ids in a shared library. A link is just one document referencing another — near-zero new machinery.</li>
+<li>Gives the <strong>web</strong> shape for free: any node → any flow, a shared flow (e.g. "escalate to tier 2") linkable from many places, cycles allowed, orphans fine.</li>
+<li>Every renderer/exporter/validator keeps working unchanged because each flow is still a plain <code>KnowflowDoc</code>.</li>
+</ul>
+<h3>Broken links</h3>
+<p>A <code>linkTo</code> whose target id resolves to nothing (bundled flow removed, deleted library doc) is a <strong>soft</strong> condition, never a crash:</p>
+<ul>
+<li>Validation surfaces it as a <strong>warning</strong> (<code>ValidationError</code> with a <code>link/*</code> code), not a hard error — flows with a broken link still render and save.</li>
+<li>The door renders in a muted "broken link" state and following it is a no-op with a small inline notice.</li>
+</ul>
+
+<h2>Bundled starter content</h2>
+<p>Curated flows ship as data in the repo, load with <strong>zero backend</strong>, and appear alongside stored flows.</p>
+<ul>
+<li><strong><code>src/library/starterFlows.ts</code></strong> — exports <code>STARTER_FLOWS: KnowflowDoc[]</code>. Each has a <strong>stable reserved id</strong> using a <code>starter:</code> prefix (e.g. <code>starter:reset-password</code>, <code>starter:2fa</code>) so links between starter flows resolve deterministically and never collide with generated ids.</li>
+<li><strong><code>src/library/flows.ts</code></strong> — a thin resolver layer over <code>src/data/library.ts</code> that the editor uses instead of calling <code>library.ts</code> directly:
+  <ul>
+  <li><code>listFlows()</code> → starter summaries (flagged <code>starter: true</code>) <strong>+</strong> stored <code>DocSummary[]</code>.</li>
+  <li><code>resolveFlow(id)</code> → returns the starter flow if <code>id</code> starts with <code>starter:</code>, else delegates to <code>getDoc(id)</code>.</li>
+  <li>Save/delete continue to target <code>library.ts</code> and are <strong>rejected for <code>starter:</code> ids</strong> (bundled flows are read-only; see below).</li>
+  </ul>
+</li>
+<li>The Diagrams panel groups the list: a <strong>"Starter flows"</strong> section (from <code>STARTER_FLOWS</code>) above <strong>"Your flows"</strong> (stored). Starter rows carry a small badge and have no delete button.</li>
+</ul>
+<h3>Seed content (initial batch — confirmed 2026-07-15)</h3>
+<p>Four real, interlinked flows ship in the first batch. Full node/branch/link structure is in <strong>Appendix A</strong>; slugs and link relationships:</p>
+<table>
+<thead><tr><th>Slug</th><th>Title</th><th>Links out to</th></tr></thead>
+<tbody>
+<tr><td><code>starter:verification</code></td><td>Verification</td><td><em>shared/reusable — linked into by others</em></td></tr>
+<tr><td><code>starter:reset-password</code></td><td>Reset Password</td><td><code>starter:verification</code></td></tr>
+<tr><td><code>starter:2fa</code></td><td>2FA — Google 2-Step</td><td><code>starter:verification</code>, <code>starter:set-no2fa-ou</code></td></tr>
+<tr><td><code>starter:set-no2fa-ou</code></td><td>Set OU to No2FA</td><td><em>shared/reusable — linked into by 2FA</em></td></tr>
+</tbody>
+</table>
+<p><strong>Verification</strong> and <strong>Set OU to No2FA</strong> are deliberately factored out as small reusable flows that others link into — the pattern the wider web will follow.</p>
+<p><strong>This is a batch, not the ceiling.</strong> More starter flows (printing, and a broader "Big Password Issues" triage hub that links out to these) are expected over time. The architecture is built so adding one = appending a <code>KnowflowDoc</code> to <code>STARTER_FLOWS</code> plus a link or two — it never requires touching existing flows.</p>
+
+<h2>Editing bundled flows — copy to edit</h2>
+<p>Starter flows are <strong>read-only when viewed</strong>; the canonical set stays pristine and a fresh instance always resets clean.</p>
+<ul>
+<li>When the active flow is a starter (<code>id</code> starts with <code>starter:</code>), the editor is in a <strong>read-only view</strong>: Palette and destructive/edit controls are disabled or hidden, autosave is off.</li>
+<li>A prominent <strong>"Make an editable copy"</strong> action forks it: deep-clone → assign a fresh non-<code>starter:</code> id → title <code>"&lt;title&gt; (copy)"</code> → <code>meta.status = 'draft'</code> → save to the library → open the copy. The copy's <code>linkTo</code> values are left pointing at their original targets (a copy can still link to canonical starter flows).</li>
+</ul>
+
+<h2>Maintaining &amp; extending starter flows</h2>
+<p>Starter flows are living procedures — they change and the set grows. Two supported edit paths, plus one helper that makes structural edits painless:</p>
+<ul>
+<li><strong>Small text tweaks</strong> → edit the node's string directly in <code>starterFlows.ts</code> and push. One-liner.</li>
+<li><strong>Structural changes / new procedures</strong> → <strong>fork → edit visually → export → paste → push</strong>: "Make an editable copy," edit with the full editor, then <strong>"Export as starter"</strong> to get the updated data, paste it over that entry in <code>starterFlows.ts</code>, push.</li>
+<li><strong>Adding a whole new starter flow</strong> (printing, a "Big Password Issues" triage hub, etc.) → author in-app, "Export as starter", append to <code>STARTER_FLOWS</code>, wire its <code>linkTo</code>s. <strong>Existing flows are never touched</strong> — the web grows by addition.</li>
+</ul>
+<p>Push auto-deploys (Vercel watches <code>main</code>), so the loop ends at "push." Every change is a git commit — version history and rollback for the canonical procedures, for free.</p>
+<h3>"Export as starter" helper</h3>
+<p>A small action (in the ⋯ More menu) on any flow: serializes the active flow via the existing <code>exportJson</code>, prompts for a slug (<code>printing</code> → <code>starter:printing</code>), rewrites the <code>id</code>, and copies a ready-to-paste <code>STARTER_FLOWS</code> entry to the clipboard. Keeps structural editing visual instead of hand-written JSON. A read-only convenience over <code>exportJson</code> — trades off nothing existing.</p>
+
+<h2>Navigation — follow &amp; back</h2>
+<p>Following a link swaps the canvas to the target flow; Back returns. Browser-style history handles loops and shared flows with no special-casing.</p>
+<ul>
+<li>Editor state gains a <strong>history stack</strong> of visited flow ids. <code>EditorScreen</code> owns it.</li>
+<li><strong>Follow:</strong> activating a door resolves <code>linkTo</code> via <code>resolveFlow</code>, pushes the current flow id onto the stack, and loads the target as the active flow. Following a broken/missing target does nothing but show the inline notice.</li>
+<li><strong>Back:</strong> pops the stack and loads the previous flow. Hidden/disabled when the stack is empty.</li>
+<li>Opening a flow directly from the Diagrams panel <strong>clears</strong> the history (fresh starting point), matching the "pick a flow to start" mental model.</li>
+<li>Autosave already persists edits to owned flows before you navigate away; starter flows are read-only so navigating away from them is clean.</li>
+</ul>
+<h3>Door affordance &amp; the edit/follow distinction</h3>
+<p>In the editor a plain node click <strong>selects</strong> for editing, so following needs its own control (not a bare click):</p>
+<ul>
+<li>A door node renders a visible link affordance — a small <strong>"↗ open"</strong> control / link icon on the node plus distinct styling — so it reads as a doorway.</li>
+<li>Activating that control (click / Enter) follows the link. Plain-clicking the node still selects it (so you can edit its text or change its target).</li>
+<li><em>(Later option, not in this spec: a read-only "Follow mode" for agents working a live call, where the whole node is clickable-to-follow. The affordance above is forward-compatible with it.)</em></li>
+</ul>
+
+<h2>Authoring links</h2>
+<p>On flows you own (non-starter), the <strong>Inspector</strong> gains a <strong>"Links to flow →"</strong> control:</p>
+<ul>
+<li>A picker listing other flows (starter + your own, excluding the current flow) to set <code>Block.linkTo</code>, plus a <strong>"None"</strong> option to clear it.</li>
+<li>Setting/clearing a link is a normal edit operation (autosaved, undoable via existing history).</li>
+<li>No new preset vocabulary — any block type can become a door.</li>
+</ul>
+
+<h2>What stays untouched</h2>
+<ul>
+<li><code>src/core/types.ts</code> — only the additive <code>linkTo?</code> field.</li>
+<li>Presets, validators (except an additive soft link-warning), layout, renderers, exporters, <code>useDocHistory</code>, autosave: unchanged in behavior.</li>
+<li><code>src/data/library.ts</code> and the <code>/api/*</code> functions: unchanged. The new <code>flows.ts</code> resolver wraps them; it does not modify them.</li>
+<li>Supabase, auth, deploy: untouched.</li>
+</ul>
+
+<h2>Build order</h2>
+<p><strong>Slice 1 — fixes barren-ness (the day-one win):</strong></p>
+<ol>
+<li><code>Block.linkTo</code> field + soft broken-link validation.</li>
+<li><code>starterFlows.ts</code> (the four confirmed flows — Appendix A) + <code>flows.ts</code> resolver.</li>
+<li>Diagrams panel lists starter flows (grouped, badged, no delete).</li>
+<li>Door affordance on linked nodes + follow control + Back history.</li>
+<li>Starter flows open read-only (no fork yet — just view + navigate).</li>
+</ol>
+<p><strong>Slice 2 — author &amp; extend:</strong></p>
+<ol start="6">
+<li>Inspector "Links to flow →" picker (set/clear on owned flows).</li>
+<li>"Make an editable copy" fork.</li>
+<li>"Export as starter" helper (the extend-the-set loop).</li>
+<li>Broken-link render/notice polish.</li>
+</ol>
+<p><strong>Deferred (noted, not built):</strong> flow-level "related flows" list · bird's-eye map (derived from links) · links in the accessible view (blocked on that view existing).</p>
+
+<h2>Testing</h2>
+<ul>
+<li><strong><code>core</code>:</strong> <code>linkTo</code> round-trips through serialize/persistence; validation flags a broken <code>linkTo</code> as a warning (not an error); setting/clearing <code>linkTo</code> via the edit operation.</li>
+<li><strong><code>library/flows</code>:</strong> <code>listFlows</code> merges starter + stored; <code>resolveFlow</code> returns starter by prefix and delegates otherwise; save/delete reject <code>starter:</code> ids.</li>
+<li><strong>Navigation:</strong> follow pushes history and swaps active flow; Back pops; opening from the panel clears history; following a broken link is a no-op.</li>
+<li><strong>Fork:</strong> copy of a starter flow gets a fresh id, <code>(copy)</code> title, draft status, is saved, and retains its <code>linkTo</code> targets.</li>
+<li>Existing suite (77 tests) stays green; <code>tsc -b</code> + <code>vite build</code> clean.</li>
+</ul>
+
+<h2>Appendix A — confirmed starter flow structures</h2>
+<p>All four render as the <strong>flowchart</strong> preset. Node kinds map to flowchart block types (<code>step</code> / <code>decision</code> / <code>outcome</code>). "→ <strong>DOOR</strong> <code>starter:x</code>" marks a node whose <code>linkTo</code> is set. Wording is the confirmed content; the executor encodes it verbatim into <code>starterFlows.ts</code> (assigning ids, connections, auto-layout positions).</p>
+
+<h3><code>starter:verification</code> — "Verification" <em>(shared)</em></h3>
+<ul>
+<li><strong>decision</strong> "Staff, or Student / Parent?"
+  <ul>
+  <li><em>Staff</em> → <strong>step</strong> "Get name and eNumber (ID), plus ONE of: Department / Location, or previous ticket info" → <em>(to the gate)</em></li>
+  <li><em>Student / Parent</em> → <strong>step</strong> "Get student ID and student name" → <strong>decision</strong> "Who is actually on the call?"
+    <ul>
+    <li><em>Student</em> → <strong>step</strong> "Get school and grade" → <em>(to the gate)</em></li>
+    <li><em>Parent</em> → <strong>step</strong> "Get parent name, email, home address (also ask school and grade)" → <em>(to the gate)</em></li>
+    <li><em>Staff for a student</em> → <strong>step</strong> "Also verify them as Staff" → <em>(into the Staff step above)</em></li>
+    </ul>
+  </li>
+  </ul>
+</li>
+<li><strong>decision</strong> (the gate) "Could the customer provide the required info?"
+  <ul>
+  <li><em>Yes</em> → <strong>outcome</strong> "Identity verified → return to your flow"</li>
+  <li><em>No — verify in person</em> → <strong>decision</strong> "Can the customer visit Tech Oasis in person?"
+    <ul>
+    <li><em>Yes</em> → <strong>outcome</strong> "Refer out to Tech Oasis (customer goes there in person)"</li>
+    <li><em>No</em> → <strong>outcome</strong> "Refer out to a field tech (tech visits the customer)"</li>
+    </ul>
+  </li>
+  <li><em>No — will follow up</em> → <strong>outcome</strong> "Customer gathers info and calls back later (or gives up)"</li>
+  </ul>
+</li>
+</ul>
+
+<h3><code>starter:reset-password</code> — "Reset Password"</h3>
+<ul>
+<li><strong>step</strong> "Verify caller identity" → <strong>DOOR</strong> <code>starter:verification</code></li>
+<li><strong>step</strong> "Reset to the monthly default (temporary) password at directory.aps.edu/rDirectory"</li>
+<li><strong>step</strong> (P) "Customer opens pwreset.aps.edu and clicks 'Change my password'"</li>
+<li><strong>step</strong> "1 · CAPTCHA (word on desktop / math on mobile)"</li>
+<li><strong>step</strong> "2 · Log in (username + temporary password)"</li>
+<li><strong>step</strong> "3 · Set new password (meets requirements; no personal info; not a reused password)"</li>
+<li><strong>decision</strong> "Submit"
+  <ul>
+  <li><em>Success</em> → <strong>outcome</strong> "Password has been changed (confirmation message)"</li>
+  <li><em>Failed, first time</em> → <em>(loop back to step P, 'Change my password')</em></li>
+  <li><em>Failed again (2nd+)</em> → <strong>step</strong> "Set a PERMANENT password directly in rDirectory (skip pwreset; UNCHECK 'Change password upon next login')" → <strong>outcome</strong> "Password has been changed"</li>
+  </ul>
+</li>
+</ul>
+
+<h3><code>starter:2fa</code> — "2FA — Google 2-Step"</h3>
+<ul>
+<li><strong>step</strong> "Verify caller identity" → <strong>DOOR</strong> <code>starter:verification</code></li>
+<li><strong>decision</strong> "Is 2FA OFF or ON? (check in Google Admin)"
+  <ul>
+  <li><em>OFF</em> → <strong>decision</strong> "New employee?"
+    <ul>
+    <li><em>Yes</em> → <strong>step</strong> "Enroll for 2-Step Verification (first-time login only)" → <em>(into step S below)</em></li>
+    <li><em>No</em> → <strong>step</strong> "Set OU to No2FA" → <strong>DOOR</strong> <code>starter:set-no2fa-ou</code> → <strong>step</strong> "Turn OFF Login Challenge (~10 min)" → <strong>step</strong> (N) "Profile icon → Manage Google Account → Security → 2-Step Verification (may re-enter password)" → <strong>step</strong> (S) "Under 'Second steps' → Phone → add backup phone → Next → Save → (maybe Approve)" → <strong>step</strong> "Return (←) to the 2-Step Verification page" → <strong>step</strong> "Turn ON 2-Step Verification"
+      <ul>
+      <li><em>Confirmed</em> → <strong>step</strong> "'You are now protected with 2-Step Verification'" → <em>(to Restore)</em></li>
+      <li><em>Not working</em> → <strong>step</strong> "Restart browser and retry; remote in if you can" → <em>(loop back to step N)</em></li>
+      </ul>
+    </li>
+    </ul>
+  </li>
+  <li><em>ON</em> → <strong>step</strong> "Set OU to No2FA" → <strong>DOOR</strong> <code>starter:set-no2fa-ou</code> → <strong>step</strong> "Google Admin → Security → 2-Step Verification → try to set it OFF (wait a few minutes)"
+    <ul>
+    <li><em>Can turn OFF</em> → <em>(into 'Turn OFF Login Challenge' in the OFF path)</em></li>
+    <li><em>Cannot turn OFF</em> → <strong>step</strong> "Get Backup Verification Codes" → <strong>step</strong> "Give the customer one 8-digit backup code" → <strong>step</strong> "Guide: 'Try another way' at the prompt → enter the code" → <strong>step</strong> "Open the 2-Step Verification page → 'Phones' under Second steps" → <strong>step</strong> "Add new phone (remove old if needed) → green check" → <strong>step</strong> "Phone updated" → <em>(to Restore)</em></li>
+    </ul>
+  </li>
+  </ul>
+</li>
+<li><strong>step</strong> (Restore) "Set the OU back to the ORIGINAL (the one you noted at the start)" — both success paths flow through here</li>
+<li><strong>outcome</strong> "Done — resolved and OU restored"</li>
+</ul>
+<blockquote>Note for the executor: the two resolution confirmations ("now protected", "phone updated") are <strong>step</strong> nodes, not terminal outcomes — they have an outgoing edge into Restore. The only terminal outcome is "Done — resolved and OU restored."</blockquote>
+
+<h3><code>starter:set-no2fa-ou</code> — "Set OU to No2FA" <em>(shared)</em></h3>
+<ul>
+<li><strong>step</strong> "Note the original Org Unit (OU)"</li>
+<li><strong>step</strong> "Change OU to: aps.edu › Staff › GoogleNoSync › No2FA"</li>
+<li><strong>step</strong> "Refresh the page to confirm the OU updated"</li>
+<li><strong>outcome</strong> "OU set → return to your flow"</li>
+</ul>
+<p><em>(Restoring the original OU lives at the end of the 2FA flow, not here — this sub-flow only sets it to No2FA. If many future flows change the OU, a paired "Restore original OU" sub-flow can be extracted later.)</em></p>
+</div></body>
+</html>

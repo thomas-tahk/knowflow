@@ -7,8 +7,8 @@ import {
   addBlock, addConnection, removeConnection, setConnectionLabel,
   moveBlock, resizeBlock, resetLayout, renameDoc, setDescription, clearDoc,
 } from '../core/operations';
-import type { DocSummary } from '../core/persistence';
-import { listDocs, getDoc, saveDoc, removeDoc, ConflictError } from '../data/library';
+import { getDoc, saveDoc, removeDoc, ConflictError } from '../data/library';
+import { listFlows, resolveFlow, isStarter, type FlowSummary } from '../library/flows';
 import { DiagramCanvas } from '../canvas/DiagramCanvas';
 import { FishboneCanvas } from '../canvas/FishboneCanvas';
 import { Palette } from './Palette';
@@ -24,7 +24,8 @@ import './EditorScreen.css';
 
 export function EditorScreen() {
   const { doc, setDoc, resetDoc, undo, redo, canUndo, canRedo } = useDocHistory(createDoc('flowchart', 'Untitled'));
-  const [library, setLibrary] = useState<DocSummary[]>([]);
+  const [library, setLibrary] = useState<FlowSummary[]>([]);
+  const [history, setHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -42,16 +43,18 @@ export function EditorScreen() {
   const isFishbone = doc.preset === 'fishbone';
   const connectable = doc.preset === 'flowchart' || doc.preset === 'decisionTree';
   const errors = useMemo(() => getPreset(doc.preset).validate(doc), [doc]);
+  const readOnly = isStarter(doc.id);
 
   // Keep the library list in sync after a save/rename without re-fetching every keystroke.
   const upsertSummary = useCallback((d: KnowflowDoc) => {
     setLibrary(prev => [
-      { id: d.id, title: d.title, preset: d.preset, status: d.meta.status, updatedAt: d.meta.updatedAt },
+      { id: d.id, title: d.title, preset: d.preset, status: d.meta.status, updatedAt: d.meta.updatedAt, starter: false },
       ...prev.filter(s => s.id !== d.id),
     ]);
   }, []);
 
   const save = useCallback(async (d: KnowflowDoc) => {
+    if (isStarter(d.id)) return; // starter flows are read-only
     try {
       await saveDoc(d, lastSynced.current ?? undefined);
       lastSynced.current = d.meta.updatedAt;
@@ -68,15 +71,12 @@ export function EditorScreen() {
   useEffect(() => {
     if (booted.current) return; booted.current = true;
     (async () => {
-      let list = await listDocs();
-      if (list.length) {
-        const d = await getDoc(list[0].id);
+      const list = await listFlows();
+      const mine = list.filter(f => !f.starter).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+      const first = mine[0] ?? list.find(f => f.starter);
+      if (first) {
+        const d = await resolveFlow(first.id);
         if (d) { resetDoc(d); lastSynced.current = d.meta.updatedAt; }
-      } else {
-        const blank = createDoc('flowchart', 'Untitled');
-        await saveDoc(blank);
-        resetDoc(blank); lastSynced.current = blank.meta.updatedAt;
-        list = await listDocs();
       }
       setLibrary(list);
       setLoading(false);
@@ -93,15 +93,28 @@ export function EditorScreen() {
     await saveDoc(doc, undefined); // unconditional overwrite
     lastSynced.current = doc.meta.updatedAt; upsertSummary(doc); setConflict(false);
   };
-  const newBlank = (preset: Preset) => { const d = createDoc(preset, 'Untitled'); switchTo(d); upsertSummary(d); };
-  const openSaved = async (id: string) => { const d = await getDoc(id); if (d) switchTo(d); };
+  const newBlank = (preset: Preset) => { const d = createDoc(preset, 'Untitled'); switchTo(d); upsertSummary(d); setHistory([]); };
+  const openFlow = async (id: string) => { const d = await resolveFlow(id); if (d) { switchTo(d); setHistory([]); } };
+  const follow = async (targetId: string) => {
+    const target = await resolveFlow(targetId);
+    if (!target) return; // broken/missing link: safe no-op
+    setHistory(h => [...h, doc.id]);
+    switchTo(target);
+  };
+  const goBack = async () => {
+    if (!history.length) return;
+    const prevId = history[history.length - 1];
+    setHistory(h => h.slice(0, -1));
+    const d = await resolveFlow(prevId);
+    if (d) switchTo(d);
+  };
   const handleDeleteDoc = async (id: string) => {
     const summary = library.find(s => s.id === id);
     if (!window.confirm(`Delete "${summary?.title || 'this diagram'}"? This can't be undone.`)) return;
     await removeDoc(id);
     const rest = library.filter(s => s.id !== id);
     setLibrary(rest);
-    if (id === doc.id) { if (rest.length) openSaved(rest[0].id); else newBlank('flowchart'); }
+    if (id === doc.id) { if (rest.length) openFlow(rest[0].id); else newBlank('flowchart'); }
   };
   const clearCanvas = () => {
     if (!window.confirm('Clear this diagram? All blocks will be removed.')) return;
@@ -184,39 +197,47 @@ export function EditorScreen() {
         </div>
 
         <div className="topbar-center">
-          <input className="doc-title" value={doc.title} placeholder="Untitled diagram"
+          <input className="doc-title" value={doc.title} placeholder="Untitled diagram" readOnly={readOnly}
             aria-label="Diagram title" onChange={e => setDoc(renameDoc(doc, e.target.value))} />
-          <input className="doc-desc" value={doc.description ?? ''} placeholder="Add a description — what is this & when do you use it?"
+          <input className="doc-desc" value={doc.description ?? ''} placeholder="Add a description — what is this & when do you use it?" readOnly={readOnly}
             aria-label="Diagram description" onChange={e => setDoc(setDescription(doc, e.target.value))} />
         </div>
 
         <div className="topbar-right">
           <button className="tbtn icon" onClick={undo} disabled={!canUndo} title="Undo (⌘/Ctrl+Z)">↶</button>
           <button className="tbtn icon" onClick={redo} disabled={!canRedo} title="Redo (⌘/Ctrl+Shift+Z)">↷</button>
-          {connectable && (
+          {connectable && !readOnly && (
             <button className={`tbtn ${connectMode ? 'active' : ''}`} onClick={() => setConnectMode(m => !m)}
               title="Connect blocks: click a start, then an end. Shortcut: C">
               {connectMode ? 'Connecting…' : 'Connect'}
             </button>
           )}
-          <span className={`save save-${status}`} role="status" aria-live="polite"
-            title="Your changes save automatically to the shared library.">
-            {status === 'saving' ? 'Saving…' : status === 'error' ? '⚠ Not saved' : 'Saved ✓'}
-          </span>
+          {readOnly ? (
+            <span className="save save-readonly" title="Starter flows are read-only.">Starter · read-only</span>
+          ) : (
+            <span className={`save save-${status}`} role="status" aria-live="polite"
+              title="Your changes save automatically to the shared library.">
+              {status === 'saving' ? 'Saving…' : status === 'error' ? '⚠ Not saved' : 'Saved ✓'}
+            </span>
+          )}
 
           <div className="more-wrap">
             <button className="tbtn" onClick={() => setMoreOpen(o => !o)}
               aria-haspopup="true" aria-expanded={moreOpen} title="More actions">⋯ More</button>
             {moreOpen && (
               <div className="more-menu" onMouseLeave={() => setMoreOpen(false)}>
-                <button onClick={() => { setDoc(resetLayout(doc)); setMoreOpen(false); }}
-                  title="Snap blocks back to the neat automatic layout — your content stays.">Tidy up layout</button>
+                {!readOnly && (
+                  <button onClick={() => { setDoc(resetLayout(doc)); setMoreOpen(false); }}
+                    title="Snap blocks back to the neat automatic layout — your content stays.">Tidy up layout</button>
+                )}
                 <button onClick={() => doExport('png')}>Download PNG</button>
                 <button onClick={() => doExport('pdf')}>Download PDF</button>
                 <FeedbackButton className="more-item" label="💬 Send feedback" onOpen={() => setMoreOpen(false)}
                   context={`${getPreset(doc.preset).name} · ${doc.title || 'Untitled'}`} />
-                <button className="danger" onClick={() => { setMoreOpen(false); clearCanvas(); }}
-                  title="Remove every block (asks first).">Clear all blocks</button>
+                {!readOnly && (
+                  <button className="danger" onClick={() => { setMoreOpen(false); clearCanvas(); }}
+                    title="Remove every block (asks first).">Clear all blocks</button>
+                )}
               </div>
             )}
           </div>
@@ -230,7 +251,7 @@ export function EditorScreen() {
           ) : (
             <DiagramCanvas
               doc={doc}
-              editable
+              editable={!readOnly}
               connectable={connectable}
               connectMode={connectMode}
               focusId={focusId}
@@ -242,8 +263,18 @@ export function EditorScreen() {
               onResize={handleResize}
               onConnect={handleCanvasConnect}
               onDeleteConnection={handleDeleteConnection}
+              onFollow={follow}
             />
           )}
+
+          {history.length > 0 && (
+            <button className="flow-backbar" onClick={goBack}>
+              <span className="flow-backbar-arrow" aria-hidden="true">←</span>
+              Back to <b>{library.find(s => s.id === history[history.length - 1])?.title ?? 'previous flow'}</b>
+            </button>
+          )}
+
+          <div className="canvas-hint" aria-hidden="true">Scroll to zoom · drag to pan</div>
 
           {connectMode && (
             <div className="connect-banner">Connect mode — click a start block, then an end block. <b>C</b> or <b>Esc</b> to exit.</div>
@@ -261,7 +292,7 @@ export function EditorScreen() {
               <DiagramsPanel
                 docs={[...library].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))}
                 activeId={doc.id}
-                onOpen={openSaved}
+                onOpen={openFlow}
                 onNew={newBlank}
                 onGenerate={() => setShowGenerate(true)}
                 onDelete={handleDeleteDoc}
@@ -280,7 +311,12 @@ export function EditorScreen() {
               <button className="panel-collapse" title="Hide" onClick={() => setRightOpen(false)}>▸</button>
             </div>
             <div className="panel-body">
-              {selectedEdgeId ? (
+              {readOnly ? (
+                <div className="ro-note">
+                  <p><b>Starter flow — read-only.</b></p>
+                  <p>This is a curated reference flow. Editing your own copy comes next; for now, follow the ↗ links and use Back to return.</p>
+                </div>
+              ) : selectedEdgeId ? (
                 <EdgeInspector
                   doc={doc}
                   edgeId={selectedEdgeId}

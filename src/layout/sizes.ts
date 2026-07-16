@@ -23,8 +23,12 @@ const LINE_H = 19;
 export function estimateSize(text: string, shape: Shape): Size {
   const len = Math.max(text.trim().length, 3);
   if (shape === 'diamond') {
-    const side = Math.min(200, Math.max(112, 60 + len * 4.4)); // diamonds stay square
-    return { width: side, height: side };
+    // Text fits in the upright square `fit`; the rendered diamond is that square tipped 45°,
+    // whose bounding box is fit*√2. Reserve the bounding box so the tipped corners don't
+    // overlap neighbouring nodes/edges (the inner shape is scaled back to `fit` in CSS).
+    const fit = Math.min(200, Math.max(112, 60 + len * 4.4));
+    const box = fit * Math.SQRT2;
+    return { width: box, height: box };
   }
   const padX = shape === 'pill' ? 40 : 32;
   const padY = shape === 'pill' ? 22 : 26;

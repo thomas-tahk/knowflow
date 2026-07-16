@@ -12,7 +12,7 @@ export function KnowflowNode({ data, selected }: NodeProps<KNode>) {
   } as React.CSSProperties;
 
   return (
-    <div className={`kf-node kf-${style.shape} ${selected ? 'kf-selected' : ''} ${data.editable ? 'kf-editable' : ''}`} style={cssVars}>
+    <div className={`kf-node kf-${style.shape} ${selected ? 'kf-selected' : ''} ${data.editable ? 'kf-editable' : ''} ${data.linkTo ? 'kf-has-link' : ''}`} style={cssVars}>
       {data.editable && (
         <NodeResizer
           minWidth={90}
@@ -26,7 +26,16 @@ export function KnowflowNode({ data, selected }: NodeProps<KNode>) {
       )}
       <Handle id="t" type="target" position={Position.Top} />
       <Handle id="l" type="target" position={Position.Left} />
-      <div className="kf-label">{data.text}</div>
+      {style.shape === 'diamond'
+        ? <div className="kf-diamond-inner"><span className="kf-label">{data.text}</span></div>
+        : <div className="kf-label">{data.text}</div>}
+      {data.linkTo && (
+        <button
+          className="kf-door"
+          title="Open the linked flow"
+          onClick={(e) => { e.stopPropagation(); data.onFollow?.(data.linkTo!); }}
+        >↗</button>
+      )}
       <Handle id="b" type="source" position={Position.Bottom} />
       <Handle id="r" type="source" position={Position.Right} />
     </div>

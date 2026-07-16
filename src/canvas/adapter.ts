@@ -1,6 +1,6 @@
 import { MarkerType, type Node, type Edge } from '@xyflow/react';
 import type { KnowflowDoc, BlockType } from '../core/types';
-import type { Positions } from '../layout';
+import type { Positions, EdgeRoutes } from '../layout';
 import { effectiveSize } from '../layout/sizes';
 
 export interface KnowflowNodeData extends Record<string, unknown> {
@@ -9,6 +9,9 @@ export interface KnowflowNodeData extends Record<string, unknown> {
   /** Set by the editable canvas so the node shows resize handles + commits resizes. */
   editable?: boolean;
   onResize?: (width: number, height: number) => void;
+  /** Set when this block is a door (Block.linkTo) — clicking the affordance follows it. */
+  linkTo?: string;
+  onFollow?: (targetId: string) => void;
 }
 
 const MARKER = { type: MarkerType.ArrowClosed, width: 18, height: 18, color: '#B6AC9B' };
@@ -24,17 +27,23 @@ function nodesFor(doc: KnowflowDoc, positions: Positions): Node<KnowflowNodeData
       width,
       height,
       deletable: false, // nodes are deleted via the inspector, not the keyboard
-      data: { blockType: b.type, text: b.text },
+      data: { blockType: b.type, text: b.text, linkTo: b.linkTo },
     };
   });
 }
 
-function graphEdges(doc: KnowflowDoc): Edge[] {
-  // Real connections: floating 'graph' edges (route to nearest borders), selectable + deletable.
-  return doc.connections.map(c => ({
-    id: c.id, source: c.from, target: c.to, label: c.label,
-    type: 'graph', markerEnd: MARKER, selectable: true, deletable: true,
-  }));
+function graphEdges(doc: KnowflowDoc, edgeRoutes: EdgeRoutes): Edge[] {
+  // Real connections: 'graph' edges. When dagre gave a routed polyline (auto-layout, node
+  // not hand-moved) the edge follows it around other nodes; otherwise GraphEdge falls back
+  // to a floating border-to-border route.
+  return doc.connections.map(c => {
+    const route = edgeRoutes[`${c.from}->${c.to}`];
+    return {
+      id: c.id, source: c.from, target: c.to, label: c.label,
+      type: 'graph', markerEnd: MARKER, selectable: true, deletable: true,
+      ...(route ? { data: { route } } : {}),
+    };
+  });
 }
 
 function sequenceEdges(doc: KnowflowDoc): Edge[] {
@@ -51,12 +60,16 @@ function sequenceEdges(doc: KnowflowDoc): Edge[] {
   return edges;
 }
 
-export function toReactFlow(doc: KnowflowDoc, positions: Positions): { nodes: Node<KnowflowNodeData>[]; edges: Edge[] } {
+export function toReactFlow(
+  doc: KnowflowDoc,
+  positions: Positions,
+  edgeRoutes: EdgeRoutes = {},
+): { nodes: Node<KnowflowNodeData>[]; edges: Edge[] } {
   const nodes = nodesFor(doc, positions);
   let edges: Edge[];
   switch (doc.preset) {
     case 'flowchart':
-    case 'decisionTree': edges = graphEdges(doc); break;
+    case 'decisionTree': edges = graphEdges(doc, edgeRoutes); break;
     case 'stepList':     edges = sequenceEdges(doc); break;
     // Fishbone is rendered by FishboneCanvas (custom SVG), not React Flow.
     case 'fishbone':     edges = []; break;

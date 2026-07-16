@@ -60,11 +60,11 @@ export default defineConfig(({ mode }) => {
             if (req.method !== 'POST') { res.statusCode = 405; res.end('Method Not Allowed'); return }
             readBody(req).then(async (payload) => {
               try {
-                const webhook = env.GOOGLE_CHAT_WEBHOOK_URL
-                if (!webhook) throw new Error('Set GOOGLE_CHAT_WEBHOOK_URL in .env.local to test feedback locally.')
-                const text = `*knowflow feedback*\n${String(payload.message ?? '').trim()}${payload.context ? `\n_${payload.context}_` : ''}`
-                const r = await fetch(webhook, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) })
-                if (!r.ok) throw new Error('Google Chat webhook rejected the message.')
+                const webhook = env.DISCORD_WEBHOOK_URL
+                if (!webhook) throw new Error('Set DISCORD_WEBHOOK_URL in .env.local to test feedback locally.')
+                const content = `**knowflow feedback**\n${String(payload.message ?? '').trim()}${payload.context ? `\n*${payload.context}*` : ''}`.slice(0, 1900)
+                const r = await fetch(webhook, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content }) })
+                if (!r.ok) throw new Error('Discord webhook rejected the message.')
                 res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ ok: true }))
               } catch (e) {
                 res.statusCode = 500; res.setHeader('content-type', 'application/json')

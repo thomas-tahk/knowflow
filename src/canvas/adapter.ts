@@ -1,6 +1,6 @@
 import { MarkerType, type Node, type Edge } from '@xyflow/react';
 import type { KnowflowDoc, BlockType } from '../core/types';
-import type { Positions } from '../layout';
+import type { Positions, EdgePoints } from '../layout';
 import { effectiveSize } from '../layout/sizes';
 
 export interface KnowflowNodeData extends Record<string, unknown> {
@@ -32,12 +32,18 @@ function nodesFor(doc: KnowflowDoc, positions: Positions): Node<KnowflowNodeData
   });
 }
 
-function graphEdges(doc: KnowflowDoc): Edge[] {
-  // Real connections: floating 'graph' edges (route to nearest borders), selectable + deletable.
-  return doc.connections.map(c => ({
-    id: c.id, source: c.from, target: c.to, label: c.label,
-    type: 'graph', markerEnd: MARKER, selectable: true, deletable: true,
-  }));
+function graphEdges(doc: KnowflowDoc, edgePoints: EdgePoints): Edge[] {
+  // Real connections: 'graph' edges. When dagre gave a routed polyline (auto-layout, node
+  // not hand-moved) the edge follows it around other nodes; otherwise GraphEdge falls back
+  // to a floating border-to-border route.
+  return doc.connections.map(c => {
+    const points = edgePoints[`${c.from}->${c.to}`];
+    return {
+      id: c.id, source: c.from, target: c.to, label: c.label,
+      type: 'graph', markerEnd: MARKER, selectable: true, deletable: true,
+      ...(points ? { data: { points } } : {}),
+    };
+  });
 }
 
 function sequenceEdges(doc: KnowflowDoc): Edge[] {
@@ -54,12 +60,16 @@ function sequenceEdges(doc: KnowflowDoc): Edge[] {
   return edges;
 }
 
-export function toReactFlow(doc: KnowflowDoc, positions: Positions): { nodes: Node<KnowflowNodeData>[]; edges: Edge[] } {
+export function toReactFlow(
+  doc: KnowflowDoc,
+  positions: Positions,
+  edgePoints: EdgePoints = {},
+): { nodes: Node<KnowflowNodeData>[]; edges: Edge[] } {
   const nodes = nodesFor(doc, positions);
   let edges: Edge[];
   switch (doc.preset) {
     case 'flowchart':
-    case 'decisionTree': edges = graphEdges(doc); break;
+    case 'decisionTree': edges = graphEdges(doc, edgePoints); break;
     case 'stepList':     edges = sequenceEdges(doc); break;
     // Fishbone is rendered by FishboneCanvas (custom SVG), not React Flow.
     case 'fishbone':     edges = []; break;

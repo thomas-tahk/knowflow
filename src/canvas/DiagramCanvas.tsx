@@ -5,7 +5,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { KnowflowDoc } from '../core/types';
-import { layoutDoc } from '../layout';
+import { layoutDocFull } from '../layout';
 import { toReactFlow, type KnowflowNodeData } from './adapter';
 import { KnowflowNode } from './KnowflowNode';
 import { GraphEdge } from './GraphEdge';
@@ -44,7 +44,10 @@ function Inner(props: Props) {
     if (!connectMode) setPending(null);
   }
 
-  const derived = useMemo(() => toReactFlow(doc, layoutDoc(doc)), [doc]);
+  const derived = useMemo(() => {
+    const { positions, edgePoints } = layoutDocFull(doc);
+    return toReactFlow(doc, positions, edgePoints);
+  }, [doc]);
 
   // `selected` is driven by selectedId so that rebuilding nodes on every doc edit
   // (the effect below) preserves the selection instead of clearing it — otherwise

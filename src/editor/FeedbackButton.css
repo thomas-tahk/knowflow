@@ -9,6 +9,14 @@
 }
 .fb-title { margin: 0; font-size: 18px; color: #29281F; }
 .fb-sub { margin: -6px 0 2px; font-size: 12.5px; color: #978D7C; }
+.fb-field { display: flex; flex-direction: column; gap: 5px; }
+.fb-label { font-size: 12.5px; font-weight: 600; color: #5C564B; }
+.fb-optional { font-weight: 400; color: #978D7C; }
+.fb-where {
+  font: inherit; font-size: 14px; color: #29281F; border: 1px solid #DED3C2; border-radius: 8px;
+  padding: 8px 10px; background: #fff; cursor: pointer;
+}
+.fb-where:focus { outline: 2px solid #0F766E; outline-offset: 1px; border-color: #0F766E; }
 .fb-text {
   font: inherit; font-size: 14px; color: #29281F; border: 1px solid #DED3C2; border-radius: 8px;
   padding: 9px 11px; background: #fff; resize: vertical;

@@ -17,7 +17,7 @@ import { EdgeInspector } from './EdgeInspector';
 import { DiagramsPanel } from './DiagramsPanel';
 import { GeneratePanel } from './GeneratePanel';
 import { ValidationHints } from './ValidationHints';
-import { FeedbackButton } from './FeedbackButton';
+import { FeedbackModal } from './FeedbackButton';
 import { useAutosave } from './useAutosave';
 import { useDocHistory } from './useDocHistory';
 import './EditorScreen.css';
@@ -33,6 +33,7 @@ export function EditorScreen() {
   const [connectMode, setConnectMode] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [conflict, setConflict] = useState(false);
@@ -232,8 +233,7 @@ export function EditorScreen() {
                 )}
                 <button onClick={() => doExport('png')}>Download PNG</button>
                 <button onClick={() => doExport('pdf')}>Download PDF</button>
-                <FeedbackButton className="more-item" label="💬 Send feedback" onOpen={() => setMoreOpen(false)}
-                  context={`${getPreset(doc.preset).name} · ${doc.title || 'Untitled'}`} />
+                <button onClick={() => { setMoreOpen(false); setFeedbackOpen(true); }}>💬 Send feedback</button>
                 {!readOnly && (
                   <button className="danger" onClick={() => { setMoreOpen(false); clearCanvas(); }}
                     title="Remove every block (asks first).">Clear all blocks</button>
@@ -349,6 +349,13 @@ export function EditorScreen() {
           defaultPreset={doc.preset}
           onClose={() => setShowGenerate(false)}
           onGenerated={(generated) => { switchTo(generated); upsertSummary(generated); setShowGenerate(false); }}
+        />
+      )}
+
+      {feedbackOpen && (
+        <FeedbackModal
+          onClose={() => setFeedbackOpen(false)}
+          context={`${getPreset(doc.preset).name} · ${doc.title || 'Untitled'}`}
         />
       )}
 

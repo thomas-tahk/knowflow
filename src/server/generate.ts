@@ -6,7 +6,7 @@ import { buildDoc, type DraftDiagram } from './buildDoc.js';
 import { diagramTool, TOOL_NAME } from './diagramTool.js';
 import { presetGuidance } from './prompts.js';
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = 'claude-sonnet-5';
 
 export interface GenerateInput {
   text: string;
@@ -43,6 +43,9 @@ export async function generateDiagram(input: GenerateInput): Promise<KnowflowDoc
     const msg = await client.messages.create({
       model: MODEL,
       max_tokens: 2000,
+      // Sonnet 5 turns adaptive thinking on when `thinking` is omitted; keep it off
+      // so it doesn't eat into max_tokens and stays compatible with a forced tool_choice.
+      thinking: { type: 'disabled' },
       system,
       tools: [tool as Anthropic.Tool],
       tool_choice: { type: 'tool', name: TOOL_NAME },

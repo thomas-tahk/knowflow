@@ -1,11 +1,13 @@
 import type { KnowflowDoc } from '../core/types';
 import type { DocSummary } from '../core/persistence';
 import { listDocs, getDoc } from '../data/library';
-import { STARTER_FLOWS } from './starterFlows';
+import { STARTER_FLOWS, STARTER_GROUPS } from './starterFlows';
 
 export interface FlowSummary extends DocSummary {
   /** True for bundled, read-only starter flows. */
   starter: boolean;
+  /** Topic title for starters; undefined for the user's own (Team) flows. */
+  group?: string;
 }
 
 /** Starter (bundled, read-only) flows use this id prefix; nothing else does. */
@@ -26,11 +28,13 @@ export async function resolveFlow(id: string): Promise<KnowflowDoc | null> {
   return getDoc(id);
 }
 
-/** All flows for the Diagrams panel: bundled starters first, then stored docs. */
+/** All flows for the Diagrams panel: bundled starters first (by topic), then stored docs. */
 export async function listFlows(): Promise<FlowSummary[]> {
   const stored = await listDocs();
   return [
-    ...STARTER_FLOWS.map(f => ({ ...summarize(f), starter: true })),
+    ...STARTER_GROUPS.flatMap(g =>
+      g.flows.map(f => ({ ...summarize(f), starter: true, group: g.title })),
+    ),
     ...stored.map(s => ({ ...s, starter: false })),
   ];
 }

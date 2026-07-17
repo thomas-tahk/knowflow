@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { STARTER_FLOWS } from './starterFlows';
+import { STARTER_FLOWS, STARTER_GROUPS } from './starterFlows';
 import { getPreset } from '../core/presets';
 
 const ids = new Set(STARTER_FLOWS.map(f => f.id));
@@ -60,5 +60,22 @@ describe('starter flows', () => {
   it('has at least one door (linkTo) across the set', () => {
     const doors = STARTER_FLOWS.flatMap(f => f.blocks).filter(b => b.linkTo);
     expect(doors.length).toBeGreaterThan(0);
+  });
+});
+
+describe('starter groups', () => {
+  it('partitions every starter into exactly one topic — no orphans, no duplicates', () => {
+    const grouped = STARTER_GROUPS.flatMap(g => g.flows.map(f => f.id));
+    expect(grouped.slice().sort()).toEqual([...ids].sort()); // covers all, each once
+  });
+
+  it('preserves flat display order (groups concatenated == STARTER_FLOWS)', () => {
+    expect(STARTER_GROUPS.flatMap(g => g.flows)).toEqual(STARTER_FLOWS);
+  });
+
+  it('titles are unique and non-empty', () => {
+    const titles = STARTER_GROUPS.map(g => g.title);
+    expect(new Set(titles).size).toBe(titles.length);
+    for (const t of titles) expect(t.length).toBeGreaterThan(0);
   });
 });

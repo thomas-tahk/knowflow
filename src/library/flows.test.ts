@@ -48,4 +48,15 @@ describe('listFlows', () => {
     expect(starters.map(s => s.id)).toEqual(STARTER_FLOWS.map(s => s.id));
     expect(stored.map(s => s.id)).toEqual(['mine']);
   });
+
+  it('stamps starters with a group title and leaves stored docs ungrouped', async () => {
+    listDocs.mockResolvedValue([
+      { id: 'mine', title: 'Mine', preset: 'flowchart', status: 'draft', updatedAt: 'z' },
+    ]);
+    const flows = await listFlows();
+    for (const s of flows.filter(f => f.starter)) {
+      expect(typeof s.group, `${s.id} group`).toBe('string');
+    }
+    expect(flows.find(f => f.id === 'mine')?.group).toBeUndefined();
+  });
 });

@@ -25,17 +25,16 @@ export interface StarterGroup {
 export const STARTER_GROUPS: StarterGroup[] = [
   {
     title: 'Account & Access',
-    flows: [verification, resetPassword, twoFactor, setNo2faOu],
+    flows: [disabledAccount, setNo2faOu, twoFactor, resetPassword, verification],
   },
   {
     title: 'Security Incident Intake',
     defaultCollapsed: true,
     flows: [
+      secOwnershipMap, secRemediation,
+      secLetsTalk, secDarkwebPassword,
+      secCompromisedAccount, secMalware, secPhishing,
       secIntake,
-      secPhishing, secMalware, secCompromisedAccount,
-      secDarkwebPassword, secLetsTalk,
-      secRemediation, secOwnershipMap,
-      disabledAccount,
     ],
   },
 ];

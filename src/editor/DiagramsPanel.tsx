@@ -3,7 +3,7 @@ import type { Preset } from '../core/types';
 import { ALL_PRESETS } from '../core/types';
 import { getPreset } from '../core/presets';
 import type { FlowSummary } from '../library/flows';
-import { STARTER_GROUPS } from '../library/starterFlows';
+import { STARTER_GROUPS, STARTER_FLOWS } from '../library/starterFlows';
 import './DiagramsPanel.css';
 
 interface Props {
@@ -20,6 +20,8 @@ const TEAM_GROUP = 'Team flows';
 const DEFAULT_COLLAPSED = new Set(
   STARTER_GROUPS.filter(g => g.defaultCollapsed).map(g => g.title),
 );
+/** Curated display order for starters — the registry, not the caller's updatedAt sort. */
+const STARTER_ORDER = new Map(STARTER_FLOWS.map((f, i) => [f.id, i]));
 
 interface GroupProps {
   title: string;
@@ -81,7 +83,9 @@ export function DiagramsPanel({ docs, activeId, onOpen, onNew, onGenerate, onDel
 
       <div className="dp-scroll">
         {starterTitles.map(title => {
-          const flows = docs.filter(d => d.group === title);
+          const flows = docs
+            .filter(d => d.group === title)
+            .sort((a, b) => (STARTER_ORDER.get(a.id) ?? 0) - (STARTER_ORDER.get(b.id) ?? 0));
           return (
             <CollapsibleGroup key={title} title={title} count={flows.length}
               collapsed={collapsed.has(title)} onToggle={() => toggle(title)}>

@@ -107,8 +107,8 @@ groups them with collapse/expand.
 
 | Decision | Choice |
 |---|---|
-| **Groups** | Two topic headers replacing the single "Starter flows" header: **Account & Access** (verification, reset-password, 2FA, set-no-2FA-OU) and **Security Incident Intake** (the `sec-*` flows + Disabled Account). Team flows stays its own group below. |
-| **Source of grouping** | An ordered `STARTER_GROUPS` registry in `starterFlows.ts` (`{ title, defaultCollapsed?, flows[] }`); `STARTER_FLOWS` is derived via `flatMap`, so `resolveFlow` is unchanged. Grouping metadata lives with registration — one source of truth for order + topic. |
+| **Groups** | Two topic headers replacing the single "Starter flows" header: **Account & Access** (Disabled Account, set-no-2FA-OU, 2FA, reset-password, verification) and **Security Incident Intake** (the `sec-*` flows). Disabled Account lives under Account & Access — it's an account-state issue, not an incident. Team flows stays its own group below. |
+| **Source of grouping** | An ordered `STARTER_GROUPS` registry in `starterFlows.ts` (`{ title, defaultCollapsed?, flows[] }`); `STARTER_FLOWS` is derived via `flatMap`, so `resolveFlow` is unchanged. Grouping metadata lives with registration — one source of truth for order + topic. The panel renders starters strictly in **registry order** (via a `STARTER_ORDER` index), independent of the `updatedAt` sort `EditorScreen` applies for Team flows — so display order is fully controlled by the registry and never scrambled by per-flow timestamps. |
 | **Default state** | All groups expanded except **Security Incident Intake** (collapsed by default, `defaultCollapsed: true`) to keep the list short. Session-only React state — no persistence. |
 | **Scope** | Every group header is collapsible via one `CollapsibleGroup` component (topics + Team flows), `<button aria-expanded>` with chevron + count. |
 

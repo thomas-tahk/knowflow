@@ -40,17 +40,19 @@ export function DiagramsPanel({ docs, activeId, onOpen, onNew, onGenerate, onDel
         {ALL_PRESETS.map(p => <option key={p} value={p}>{getPreset(p).name}</option>)}
       </select>
 
-      {starters.length > 0 && (
-        <>
-          <div className="dp-group">Starter flows</div>
-          <div className="dp-list">{starters.map(row)}</div>
-        </>
-      )}
+      <div className="dp-scroll">
+        {starters.length > 0 && (
+          <>
+            <div className="dp-group">Starter flows</div>
+            <div className="dp-list">{starters.map(row)}</div>
+          </>
+        )}
 
-      <div className="dp-group">Team flows</div>
-      <div className="dp-list">
-        {mine.length === 0 && <p className="dp-empty">No saved diagrams yet.</p>}
-        {mine.map(row)}
+        <div className="dp-group">Team flows</div>
+        <div className="dp-list">
+          {mine.length === 0 && <p className="dp-empty">No saved diagrams yet.</p>}
+          {mine.map(row)}
+        </div>
       </div>
     </div>
   );

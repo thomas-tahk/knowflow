@@ -1,4 +1,4 @@
-import type { KnowflowDoc, BlockType } from '../core/types';
+import type { KnowflowDoc, Block, BlockType } from '../core/types';
 import { estimateSize } from '../layout/sizes';
 
 export interface LabelBox { id: string; type: BlockType; text: string; cx: number; cy: number; w: number; h: number; }
@@ -20,7 +20,9 @@ export interface FishboneGeom {
 
 const COL = 210;       // x distance between rib joints along the spine
 const RIB_RUN = 70;    // horizontal run of a rib (joint.x - category.x)
-const RIB_RISE = 150;  // vertical rise of a rib above/below the spine
+const MIN_RISE = 120;  // shortest a rib gets, so sparse categories aren't cramped
+const FIRST = 34;      // gap from the spine to the first cause's near edge
+const GAP = 16;        // vertical gap between stacked cause boxes (and before the category)
 const HEAD_W = 210, HEAD_H = 76;
 const CAT_W = 142;   // minimum category width (grows to fit text)
 const CAUSE_W = 132; // minimum cause width (grows to fit text)
@@ -30,7 +32,9 @@ const LEFT = 60;       // spine tail x
 
 // Builds Ishikawa geometry: one horizontal spine into the effect (head) box,
 // ribs branching off the spine at distinct joints (alternating above/below),
-// and causes as short twigs along each rib. Pure — no DOM, fully testable.
+// and causes as short twigs along each rib. Causes are stacked by their real
+// height (not fractions of a fixed rib), and each rib grows to fit them, so
+// labels never overlap. Pure — no DOM, fully testable.
 export function fishboneSvgLayout(doc: KnowflowDoc): FishboneGeom {
   const categories = doc.blocks.filter(b => b.type === 'category');
   const spineBlock = doc.blocks.find(b => b.type === 'spine');
@@ -44,22 +48,45 @@ export function fishboneSvgLayout(doc: KnowflowDoc): FishboneGeom {
     head = { id: spineBlock.id, type: 'spine', text: spineBlock.text, cx: spineRight + hs.w / 2, cy: 0, w: hs.w, h: Math.max(HEAD_H, hs.h) };
   }
 
+  // Group causes by their category in one pass, so the per-category work below
+  // stays linear overall (not categories × blocks).
+  const causesByCat = new Map<string, Block[]>();
+  for (const b of doc.blocks) {
+    if (b.type === 'cause' && b.categoryId) {
+      const list = causesByCat.get(b.categoryId);
+      if (list) list.push(b); else causesByCat.set(b.categoryId, [b]);
+    }
+  }
+
   const cats: CategoryGeom[] = categories.map((cat, i) => {
     const above = i % 2 === 0;
     const sign = above ? -1 : 1;
     const jx = LEFT + (i + 1) * COL;          // this rib's joint on the spine
-    const catCx = jx - RIB_RUN;               // category sits up/down and back toward the tail
-    const catCy = sign * RIB_RISE;
-    const rib: Seg = { x1: catCx, y1: catCy, x2: jx, y2: 0 };
+
+    // Stack causes outward from the spine by their real height, tracking each
+    // one's centre distance from the spine so nothing overlaps.
+    const causeBlocks = causesByCat.get(cat.id) ?? [];
+    const causeSizes = causeBlocks.map(cz => labelSize(cz.text, CAUSE_W, 190));
+    const centres: number[] = [];
+    let edge = FIRST;                          // running outer edge, distance from spine
+    for (const zs of causeSizes) {
+      centres.push(edge + zs.h / 2);
+      edge += zs.h + GAP;
+    }
+
+    // The category sits just beyond the last cause; the rib reaches it.
     const cs = labelSize(cat.text, CAT_W, 200);
+    const rise = Math.max(MIN_RISE, edge + cs.h / 2);
+    const catCx = jx - RIB_RUN;               // category sits up/down and back toward the tail
+    const catCy = sign * rise;
+    const rib: Seg = { x1: catCx, y1: catCy, x2: jx, y2: 0 };
     const box: LabelBox = { id: cat.id, type: 'category', text: cat.text, cx: catCx, cy: catCy, w: cs.w, h: cs.h };
 
-    const causeBlocks = doc.blocks.filter(b => b.type === 'cause' && b.categoryId === cat.id);
     const causes: CauseGeom[] = causeBlocks.map((cz, j) => {
-      const t = (j + 1) / (causeBlocks.length + 1); // fraction along the rib, spine -> category
+      const t = centres[j] / rise;             // fraction along the rib (keeps the cause on it)
       const px = jx + t * (catCx - jx);
-      const py = t * catCy;
-      const zs = labelSize(cz.text, CAUSE_W, 190);
+      const py = sign * centres[j];
+      const zs = causeSizes[j];
       const twig: Seg = { x1: px, y1: py, x2: px - TWIG_LEN, y2: py };
       const cbox: LabelBox = { id: cz.id, type: 'cause', text: cz.text, cx: px - TWIG_LEN - zs.w / 2, cy: py, w: zs.w, h: zs.h };
       return { box: cbox, twig };

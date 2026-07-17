@@ -5,9 +5,23 @@ import { getPreset } from '../core/presets';
 const ids = new Set(STARTER_FLOWS.map(f => f.id));
 
 describe('starter flows', () => {
-  it('has the four expected flows, all starter: prefixed', () => {
+  it('has the expected flows, all starter: prefixed', () => {
     expect([...ids].sort()).toEqual(
-      ['starter:2fa', 'starter:reset-password', 'starter:set-no2fa-ou', 'starter:verification'],
+      [
+        'starter:2fa',
+        'starter:disabled-account',
+        'starter:reset-password',
+        'starter:sec-compromised-account',
+        'starter:sec-darkweb-password',
+        'starter:sec-intake',
+        'starter:sec-lets-talk',
+        'starter:sec-malware',
+        'starter:sec-ownership-map',
+        'starter:sec-phishing',
+        'starter:sec-remediation',
+        'starter:set-no2fa-ou',
+        'starter:verification',
+      ],
     );
     for (const f of STARTER_FLOWS) expect(f.id.startsWith('starter:')).toBe(true);
   });

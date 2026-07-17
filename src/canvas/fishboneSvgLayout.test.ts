@@ -56,4 +56,25 @@ describe('fishboneSvgLayout', () => {
     expect(g.categories).toHaveLength(0);
     expect(g.head).not.toBeNull();
   });
+
+  it('stacks many causes without overlapping labels', () => {
+    const g = fishboneSvgLayout(doc({
+      blocks: [
+        { id: 's', type: 'spine', text: 'Effect' },
+        { id: 'c1', type: 'category', text: 'Service Desk' },
+        { id: 'a', type: 'cause', text: 'Reset passwords', categoryId: 'c1' },
+        { id: 'b', type: 'cause', text: 'Notify users of the reset', categoryId: 'c1' },
+        { id: 'c', type: 'cause', text: 'Create the incident ticket', categoryId: 'c1' },
+        { id: 'd', type: 'cause', text: 'Walk the customer through it', categoryId: 'c1' },
+      ],
+    }));
+    const boxes = [g.head!, ...g.categories.flatMap(c => [c.box, ...c.causes.map(z => z.box)])];
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i], b = boxes[j];
+        const overlap = Math.abs(a.cx - b.cx) < (a.w + b.w) / 2 && Math.abs(a.cy - b.cy) < (a.h + b.h) / 2;
+        expect(overlap, `"${a.text}" overlaps "${b.text}"`).toBe(false);
+      }
+    }
+  });
 });

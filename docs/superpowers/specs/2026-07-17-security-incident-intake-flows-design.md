@@ -101,8 +101,27 @@ The design above is the starting point; it evolved through review with the Servi
 - **`Disabled Account` fishbone** — recreated (skeleton) from the team's PDF; validates the renderer on real, varied content and kept as a flow.
 - **Diagrams panel fix** — one scroll region below the buttons so the "Team flows" group can't be clipped.
 
+### Flows-list grouping (shipped — separate PR off merged `main`)
+The starter list grew to 13 flows in two natural topics, so the Diagrams panel now
+groups them with collapse/expand.
+
+| Decision | Choice |
+|---|---|
+| **Groups** | Two topic headers replacing the single "Starter flows" header: **Account & Access** (Disabled Account, set-no-2FA-OU, 2FA, reset-password, verification) and **Security Incident Intake** (the `sec-*` flows). Disabled Account lives under Account & Access — it's an account-state issue, not an incident. Team flows stays its own group below. |
+| **Source of grouping** | An ordered `STARTER_GROUPS` registry in `starterFlows.ts` (`{ title, defaultCollapsed?, flows[] }`); `STARTER_FLOWS` is derived via `flatMap`, so `resolveFlow` is unchanged. Grouping metadata lives with registration — one source of truth for order + topic. The panel renders starters strictly in **registry order** (via a `STARTER_ORDER` index), independent of the `updatedAt` sort `EditorScreen` applies for Team flows — so display order is fully controlled by the registry and never scrambled by per-flow timestamps. |
+| **Default state** | All groups expanded except **Security Incident Intake** (collapsed by default, `defaultCollapsed: true`) to keep the list short. Session-only React state — no persistence. |
+| **Scope** | Every group header is collapsible via one `CollapsibleGroup` component (topics + Team flows), `<button aria-expanded>` with chevron + count. |
+
+`FlowSummary` gains `group?: string` (topic title for starters; `undefined` = Team flows);
+`listFlows` stamps each starter with its group. Locked with a test asserting the two
+titles partition all starters with no orphans.
+
 ### Still open (follow-up)
-- Flows-list grouping with collapse/expand by topic.
-- Fork-to-edit for starter flows (duplicate into the editable library) instead of an in-place editable toggle.
+- **Disabled Account editable — its own PR.** Starters are intentionally viewable by
+  everyone (bundled, no backend), so Disabled Account stays a starter for now.
+  Direction for that PR: a **read-only ↔ editable toggle** (guarded by an "are you
+  sure?" confirm) that forks the bundled starter into an editable library copy on
+  demand — keeping the canonical starter as the always-viewable version while allowing
+  edits. This generalizes the earlier "fork-to-edit for starter flows" item.
 - Ownership map could map the Security Tasks onto owning teams more fully.
 - fishbone model can't carry colors, on-rib team labels, side legends, or annotation arrows (the Disabled Account original uses all of these).

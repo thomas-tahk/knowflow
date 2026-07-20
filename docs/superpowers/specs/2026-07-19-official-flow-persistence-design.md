@@ -81,7 +81,23 @@ The `starter:` prefix becomes a slight misnomer. That is cosmetic and not worth
 migration risk. Ids are opaque keys; new official flows created in-app will get
 ordinary generated ids, and a mixed id space is fine.
 
-### 5. The server owns `status`; delete of official is refused
+**Nothing is expected to force a change.** Ids are opaque strings — no constraint comes
+from Postgres, Supabase, Vercel or the code; forks receive fresh ids so collisions cannot
+arise; and the ids would survive a migration off Supabase entirely. The only realistic
+pressure is cosmetic (a flow renamed conceptually, and someone feeling the id should
+match), which should be resisted.
+
+The existing guard rail is the tripwire: `starterFlows.test.ts:52` asserts every `linkTo`
+resolves to a real flow, so an id change that orphans a link fails the suite before it
+ships. That invariant must be extended to cover seeded rows.
+
+### 5. `status` cannot change on save; delete of official is refused
+
+> **The server applies no judgment and has no criterion.** It does not decide which flows
+> deserve to be official. The rule is mechanical: *saving a flow cannot change whether it
+> is official* — the server keeps whatever the row already had, the same way saving a
+> document cannot change who owns it.
+
 
 `api/docs.ts:19-20` passes the client's document straight to `saveDoc` with **no
 validation**, and `src/server/docs.ts:43` writes `status: doc.meta.status` — the value
@@ -92,10 +108,21 @@ Combined with the delete guard below, that would let anyone create a flow **nobo
 delete through the app**. A permission model keyed off a client-controlled field
 protects nothing.
 
-- Status is server-decided. A normal save can never change it; the value is read from
-  the existing row (or defaults to `draft` for new documents).
-- Promotion to `official` happens only via the seed script or an explicit promote path.
+- A normal save never changes status; the value is read from the existing row (or
+  defaults to `draft` for new documents).
+- Promotion to `official` happens **only via the seed script**, never through the app.
 - `deleteDoc` reads the row's status first and refuses when it is `official`.
+
+**Who has final say, and why this is not deferred authorization.** Promotion happens
+outside the app, by running a script that requires the Supabase service key. The
+"qualified individual" gate is therefore *physical access to the credential* — the
+strongest control currently available, and it costs nothing to build.
+
+The tripwire for when this stops being sufficient: **the day someone who is not the repo
+owner needs to promote a flow without using a terminal.** At that point the cheap step is
+a second admin secret gating an in-app promote action — defensible for a rare, high-stakes
+operation even though it was rejected for everyday editing. Full user accounts are only
+required if promotion rights must differ *between* team members.
 
 Delete is treated asymmetrically from edit on purpose: edits are visible and
 correctable, deletes are silent and permanent, and this app has no history.
@@ -134,19 +161,58 @@ two new columns require a migration.
 `status === 'official'` instead, or the seeded rows would still be treated as untouchable
 bundle content and the change would be inert.
 
-## Offline mode indicator
+## Backend availability: pausing, keep-alive, and the offline indicator
+
+### The failure mode is scheduled, not hypothetical
+
+Supabase pauses Free Plan projects after roughly **7 days** of insufficient database
+activity. Two properties make this serious:
+
+- **A paused project does not wake on request.** Restoring it requires opening the
+  Supabase dashboard and clicking *Resume project*. The app stays broken until a human
+  intervenes.
+- **Restoration expires.** After 90 days paused, the project can no longer be restored
+  through Studio; recovery means downloading backups and migrating to a new project.
+
+A service desk consults flows during incidents rather than daily — precisely the usage
+profile that gets paused. This also retroactively strengthens decision 3: the bundled
+modules are not insurance against a rare hiccup but against a **predictable recurring
+event**. Without them, a paused project means the team opens the app and sees nothing.
+
+### Keep-alive (removes the failure mode)
+
+A daily GitHub Actions job issues one authenticated `GET /api/docs`, which runs a real
+`select` against the `documents` table. Routing through the app's own API rather than
+straight at Supabase exercises the full user path — Vercel function, password gate,
+database query — so the job doubles as monitoring: `curl -f` fails on any non-2xx and
+GitHub emails on a failed scheduled run.
+
+Two caveats to carry into implementation:
+
+- Verify empirically that read activity alone prevents pausing. The documentation says
+  "a few user requests to the database each day" without distinguishing reads from
+  writes. Confirm the project survives two quiet weeks before treating this as solved.
+- GitHub disables scheduled workflows in repositories with no commits for 60 days, which
+  would silently kill the keep-alive on a quiet repo. Include `workflow_dispatch` so it
+  can be re-triggered by hand.
+
+### Offline indicator (the backstop)
 
 `src/data/library.ts` silently flips to `localMode` on 501 or network failure and tells
-the user nothing.
+the user nothing. This change makes that materially worse: today those flows are honestly
+read-only, but afterwards an offline user sees the *bundled* copies, edits one believing
+they are fixing team content, and saves it to their own browser. It looks like it worked.
+Nobody else ever sees it.
 
-This change makes that materially worse. Today those flows are honestly read-only. After
-this change, an offline user sees the *bundled* copies, edits one believing they are
-fixing team content, and saves it to their own browser. It looks like it worked. Nobody
-else ever sees it.
+The indicator must distinguish two states, because they differ in severity:
 
-Requirement: when `localMode` is active, show a persistent, visible indicator that the
-app is working offline and changes are not shared. Wording to be settled during
-implementation; the requirement is that the state is never silent.
+| State | Meaning | Treatment |
+|---|---|---|
+| Not configured (501) | Local development, no Supabase | Quiet notice; harmless |
+| Unreachable / paused | Backend down or paused — **changes are not shared** | Persistent, prominent |
+
+Exact wording is settled during implementation. The requirement is that the second state
+is never silent.
 
 ## Non-goals
 
@@ -163,9 +229,13 @@ Deferred but **scheduled next**, because the mechanism is cheap later while the 
 data is not:
 
 - **Edit history (step 2).** Overwriting an official flow is unguarded and this app has
-  no version history, so a mangled save destroys hand-built work permanently. A second
-  append-only table fixes it whenever it is built, but nothing lost before then is
-  recoverable.
+  no version history. A second append-only table fixes it whenever it is built.
+
+  Scoping the risk honestly: the **original 13 flows are in git permanently** and the seed
+  script restores them, so the curated baseline is never truly lost. What is at risk is
+  only *improvements made after seeding* — a colleague's genuine correction clobbered by a
+  later bad save. That is a real but much narrower exposure, which is why history is
+  scheduled next rather than folded into step 1.
 
 ## Testing
 
@@ -185,7 +255,9 @@ data is not:
 
 | Risk | Mitigation |
 |---|---|
+| Free-tier project pauses after ~7 days idle | Daily keep-alive cron; bundled modules keep the app usable meanwhile |
+| Keep-alive itself silently stops | GitHub disables cron on repos idle 60 days — `workflow_dispatch` allows manual re-trigger |
 | Code copies drift from rows | Modules are frozen seed material; never hand-edited |
 | Confirm dialog read as security | State plainly that it is a speed-bump, not a permission |
-| Bad edit destroys a curated flow | Step 2 (history). Seed script is a partial undo until then |
+| Bad edit destroys a post-seed improvement | Step 2 (history). Originals remain in git and restorable via seed |
 | Seed run against the wrong project | Script requires an explicit env var; prints target before writing |

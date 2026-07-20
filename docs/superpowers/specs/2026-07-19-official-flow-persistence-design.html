@@ -69,6 +69,8 @@
   pre code { background: none; color: var(--fg); padding: 0; font-size: 13px; }
   .add { color: var(--ok); font-weight: 700; }
 </style>
+</head>
+<body>
 <main>
 <p class="meta">2026-07-19 · Design locked, no code written yet</p>
 <h1>Official flow persistence <span class="tag tag-ok">DESIGN LOCKED</span></h1>
@@ -134,8 +136,21 @@ a link graph, not just keys. Renaming one later means rewriting the row id <em>a
 <code>linkTo</code> string inside every other document&rsquo;s JSON, plus any team forks by then.</p>
 <p>The <code>starter:</code> prefix becomes a slight misnomer. That is cosmetic and not worth
 migration risk.</p>
+<p><strong>Nothing is expected to force a change.</strong> Ids are opaque strings — no constraint
+comes from Postgres, Supabase, Vercel or the code; forks receive fresh ids so collisions cannot
+arise; and they would survive a migration off Supabase entirely. The only realistic pressure is
+cosmetic (a flow renamed conceptually, someone feeling the id should match), which should be
+resisted. The guard rail already exists: <code>starterFlows.test.ts:52</code> asserts every
+<code>linkTo</code> resolves, so an id change that orphans a link <strong>fails the suite before it
+ships</strong>. That invariant must be extended to seeded rows.</p>
 
-<h3>5 · The server owns <code>status</code>; delete of official is refused</h3>
+<h3>5 · <code>status</code> cannot change on save; delete of official is refused</h3>
+<div class="callout key">
+<p><strong>The server applies no judgment and has no criterion.</strong> It does not decide which
+flows deserve to be official. The rule is mechanical: <em>saving a flow cannot change whether it is
+official</em> — the server keeps whatever the row already had, the same way saving a document cannot
+change who owns it.</p>
+</div>
 <p><code>api/docs.ts:19-20</code> passes the client&rsquo;s document straight to
 <code>saveDoc</code> with <strong>no validation</strong>, and <code>src/server/docs.ts:43</code>
 writes <code>status: doc.meta.status</code> — the value <em>the client sent</em>. As it stands, any
@@ -145,12 +160,21 @@ client can save a document marked <code>official</code>.</p>
 through the app</strong>. A permission model keyed off a client-controlled field protects nothing.</p>
 </div>
 <ul>
-<li>Status is server-decided. A normal save can never change it.</li>
-<li>Promotion to <code>official</code> happens only via the seed script or an explicit promote path.</li>
+<li>A normal save never changes status; the value is read from the existing row.</li>
+<li>Promotion to <code>official</code> happens <strong>only via the seed script</strong>, never through the app.</li>
 <li><code>deleteDoc</code> reads the row&rsquo;s status first and refuses when it is official.</li>
 </ul>
 <p>Delete is asymmetric from edit on purpose: edits are visible and correctable, deletes are silent
 and permanent, and this app has no history.</p>
+<p><strong>Who has final say, and why this is not deferred authorization.</strong> Promotion happens
+outside the app, by running a script that requires the Supabase service key. The
+&ldquo;qualified individual&rdquo; gate is therefore <em>physical access to the credential</em> — the
+strongest control currently available, and it costs nothing to build.</p>
+<p>The tripwire for when this stops being sufficient: <strong>the day someone who is not the repo
+owner needs to promote a flow without using a terminal.</strong> At that point the cheap step is a
+second admin secret gating an in-app promote action — defensible for a rare, high-stakes operation
+even though it was rejected for everyday editing. Full user accounts are only required if promotion
+rights must differ <em>between</em> team members.</p>
 
 <h2>Data model</h2>
 <div class="wrap">
@@ -180,14 +204,50 @@ migration.</p>
 must key off <code>status === 'official'</code> instead, or the seeded rows would still be treated
 as untouchable bundle content and <strong>the change would be inert</strong>.</p>
 
-<h2>Offline mode indicator</h2>
+<h2>Backend availability <span class="tag tag-warn">SCHEDULED FAILURE</span></h2>
+<h3>The failure mode is not hypothetical</h3>
+<p>Supabase pauses Free Plan projects after roughly <strong>7 days</strong> of insufficient database
+activity. Two properties make this serious:</p>
+<ul>
+<li><strong>A paused project does not wake on request.</strong> Restoring it requires opening the
+Supabase dashboard and clicking <em>Resume project</em>. The app stays broken until a human intervenes.</li>
+<li><strong>Restoration expires.</strong> After 90 days paused, the project can no longer be restored
+through Studio; recovery means downloading backups and migrating to a new project.</li>
+</ul>
+<p>A service desk consults flows during incidents rather than daily — precisely the usage profile
+that gets paused. This retroactively strengthens decision 3: the bundled modules guard against a
+<strong>predictable recurring event</strong>, not a rare hiccup. Without them, a paused project means
+the team opens the app and sees nothing.</p>
+
+<h3>Keep-alive — removes the failure mode</h3>
+<p>A daily GitHub Actions job issues one authenticated <code>GET /api/docs</code>, which runs a real
+<code>select</code> against the table. Routing through the app&rsquo;s own API rather than straight at
+Supabase exercises the full user path — Vercel function, password gate, database query — so the job
+<strong>doubles as monitoring</strong>: <code>curl -f</code> fails on any non-2xx and GitHub emails on
+a failed scheduled run.</p>
+<div class="callout risk">
+<p><strong>Two caveats for implementation.</strong> (1) Verify empirically that read activity alone
+prevents pausing — the docs say &ldquo;a few user requests to the database each day&rdquo; without
+distinguishing reads from writes; confirm the project survives two quiet weeks. (2) GitHub disables
+scheduled workflows in repos with no commits for 60 days, which would silently kill the keep-alive on
+a quiet repo. Include <code>workflow_dispatch</code> for manual re-trigger.</p>
+</div>
+
+<h3>Offline indicator — the backstop</h3>
 <p><code>src/data/library.ts</code> silently flips to local storage on failure and tells the user
 nothing. <strong>This change makes that materially worse.</strong> Today those flows are honestly
 read-only. After this change, an offline user sees the bundled copies, edits one believing they are
 fixing team content, and saves it to their own browser. It looks like it worked. Nobody else ever
 sees it.</p>
-<p><strong>Requirement:</strong> when offline mode is active, show a persistent visible indicator
-that changes are not shared. The requirement is that the state is never silent.</p>
+<div class="wrap">
+<table>
+<tr><th>State</th><th>Meaning</th><th>Treatment</th></tr>
+<tr><td>Not configured (501)</td><td>Local development, no Supabase</td><td>Quiet notice; harmless</td></tr>
+<tr><td>Unreachable / paused</td><td>Backend down or paused — <strong>changes are not shared</strong></td><td>Persistent, prominent</td></tr>
+</table>
+</div>
+<p>Exact wording is settled during implementation. The requirement is that the second state is
+<strong>never silent</strong>.</p>
 
 <h2>Non-goals</h2>
 <p>Out of scope and safely deferrable — these add columns or policies later without rewriting this
@@ -195,8 +255,13 @@ work: user accounts and roles, per-user ownership, migrating to Supabase RLS, sp
 library into scopes, and fork-to-edit (decision 1 makes editing in place the primary path).</p>
 <div class="callout risk">
 <p><strong>Deferred but scheduled next — edit history (step 2).</strong> Overwriting an official
-flow is unguarded and this app has no version history, so a mangled save destroys hand-built work
-permanently. The mechanism is cheap to build later; the data lost before then is not recoverable.</p>
+flow is unguarded and this app has no version history. A second append-only table fixes it whenever
+it is built.</p>
+<p>Scoping the risk honestly: the <strong>original 13 flows are in git permanently</strong> and the
+seed script restores them, so the curated baseline is never truly lost. What is at risk is only
+<em>improvements made after seeding</em> — a colleague&rsquo;s genuine correction clobbered by a later
+bad save. That is a real but much narrower exposure, which is why history is scheduled next rather
+than folded into step 1.</p>
 </div>
 
 <h2>Testing</h2>
@@ -214,9 +279,11 @@ permanently. The mechanism is cheap to build later; the data lost before then is
 <div class="wrap">
 <table>
 <tr><th>Risk</th><th>Mitigation</th></tr>
+<tr><td>Free-tier project pauses after ~7 days idle</td><td>Daily keep-alive cron; bundled modules keep the app usable meanwhile</td></tr>
+<tr><td>Keep-alive itself silently stops</td><td>GitHub disables cron on repos idle 60 days — <code>workflow_dispatch</code> allows manual re-trigger</td></tr>
 <tr><td>Code copies drift from rows</td><td>Modules are frozen seed material; never hand-edited</td></tr>
 <tr><td>Confirm dialog read as security</td><td>State plainly that it is a speed-bump, not a permission</td></tr>
-<tr><td>Bad edit destroys a curated flow</td><td>Step 2 (history). Seed script is a partial undo until then</td></tr>
+<tr><td>Bad edit destroys a post-seed improvement</td><td>Step 2 (history). Originals remain in git and restorable via seed</td></tr>
 <tr><td>Seed run against the wrong project</td><td>Script requires an explicit env var; prints target before writing</td></tr>
 </table>
 </div>

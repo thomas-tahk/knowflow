@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "seed:flows": "vite-node scripts/seedFlows.ts"
+    "seed:flows": "vite-node scripts/seedFlows.run.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",

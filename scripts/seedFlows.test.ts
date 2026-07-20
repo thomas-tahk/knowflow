@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { buildSeedRows } from './seedFlows';
 import { STARTER_FLOWS, STARTER_GROUPS } from '../src/library/starterFlows';
+
+const run = promisify(execFile);
 
 describe('buildSeedRows', () => {
   it('produces one row per curated flow', () => {
@@ -38,4 +42,25 @@ describe('buildSeedRows', () => {
       }
     }
   });
+});
+
+// The unit tests above import buildSeedRows directly, so they all passed while
+// `npm run seed:flows` was a silent no-op: its entry guard matched process.argv[1] against
+// the filename, which is the vite-node binary, not the script. Only running the real command
+// catches that, so this asserts the command actually reaches main().
+describe('npm run seed:flows', () => {
+  it('reaches main() and refuses to run without credentials', async () => {
+    const env = { ...process.env };
+    delete env.SUPABASE_URL;
+    delete env.SUPABASE_SERVICE_KEY;
+
+    const failure = await run('npm', ['run', 'seed:flows'], { env }).then(
+      () => null,
+      (e: { code?: number; stderr?: string }) => e,
+    );
+
+    expect(failure, 'command exited 0 — it silently did nothing').not.toBeNull();
+    expect(failure?.code).toBe(1);
+    expect(failure?.stderr).toContain('Missing SUPABASE_URL');
+  }, 60_000);
 });

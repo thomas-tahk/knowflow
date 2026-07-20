@@ -47,7 +47,7 @@ export function buildSeedRows(): SeedRow[] {
   );
 }
 
-async function main(): Promise<void> {
+export async function seedFlows(): Promise<void> {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_KEY;
   if (!url || !key) {
@@ -81,7 +81,3 @@ async function main(): Promise<void> {
 
   console.log(`\nSeeded ${rows.length} official flows.`);
 }
-
-// Only seed when run as a script. Importing this module (e.g. from tests) must not write
-// to a database as a side effect.
-if (process.argv[1]?.includes('seedFlows')) main();

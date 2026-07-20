@@ -3,7 +3,7 @@
 // and Vercel runs this as a native ESM function where extensionless imports throw
 // ERR_MODULE_NOT_FOUND (surfaces as FUNCTION_INVOCATION_FAILED). Dev/build don't hit
 // this file (dev uses Vite ssrLoadModule on src/server/docs.ts directly).
-import { listDocs, getDoc, saveDoc, deleteDoc, StorageNotConfigured, ConflictError } from '../src/server/docs.js';
+import { listDocs, getDoc, saveDoc, deleteDoc, StorageNotConfigured, ConflictError, OfficialProtected } from '../src/server/docs.js';
 
 export default async function handler(req: any, res: any) {
   if (process.env.APP_PASSWORD && req.headers['x-app-password'] !== process.env.APP_PASSWORD) {
@@ -25,6 +25,7 @@ export default async function handler(req: any, res: any) {
   } catch (e) {
     if (e instanceof StorageNotConfigured) { res.status(501).json({ error: 'Storage not configured' }); return; }
     if (e instanceof ConflictError) { res.status(409).json({ error: 'conflict', currentUpdatedAt: e.currentUpdatedAt }); return; }
+    if (e instanceof OfficialProtected) { res.status(403).json({ error: e.message }); return; }
     res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
   }
 }

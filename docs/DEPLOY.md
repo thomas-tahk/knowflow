@@ -33,8 +33,21 @@ You'll end up with **5 environment variables**:
      status text,
      description text,
      data jsonb not null,
-     updated_at text
+     updated_at text,
+     topic text,
+     sort_order int
    );
+   ```
+
+   **Already have a `documents` table from before?** Run this instead to add the two new
+   columns:
+   ```sql
+   alter table documents add column if not exists topic text;
+   alter table documents add column if not exists sort_order int;
+   ```
+   Then load the curated flows (once, from your machine, with both env vars set):
+   ```
+   npm run seed:flows
    ```
    You should see "Success. No rows returned." (No row-level-security setup needed — only our server touches this table, using the secret key. `updated_at` is `text` on purpose — it's the exact token the concurrent-edit conflict check compares.)
 4. Open **Settings** (gear icon, bottom-left) → **API**. Copy two things:

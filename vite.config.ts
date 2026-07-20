@@ -47,9 +47,12 @@ export default defineConfig(({ mode }) => {
                 else { res.statusCode = 405; res.end('Method Not Allowed'); return }
                 res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(result))
               } catch (e) {
-                // StorageNotConfigured -> 501 (client uses localStorage); Conflict -> 409.
+                // StorageNotConfigured -> 501 (client uses localStorage); Conflict -> 409;
+                // OfficialProtected -> 403 (delete refused). Mirrors api/docs.ts.
                 const name = (e as Error)?.name
-                res.statusCode = name === 'StorageNotConfigured' ? 501 : name === 'Conflict' ? 409 : 500
+                res.statusCode = name === 'StorageNotConfigured' ? 501
+                  : name === 'Conflict' ? 409
+                  : name === 'OfficialProtected' ? 403 : 500
                 res.setHeader('content-type', 'application/json')
                 res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }))
               }

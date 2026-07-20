@@ -1,0 +1,23 @@
+.smb {
+  padding: 8px 16px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  text-align: center;
+  border-bottom: 1px solid transparent;
+}
+
+/* No backend configured (local dev) — informational, deliberately low-key. */
+.smb-info {
+  background: #F4F1EA;
+  color: #5C564B;
+  border-bottom-color: #DED3C2;
+}
+
+/* Backend unreachable — work is silently not being shared. Must be hard to miss. */
+.smb-warn {
+  background: #FDEDE6;
+  color: #7C2D12;
+  border-bottom-color: #F2C7B0;
+}
+
+.smb-warn strong { font-weight: 700; }

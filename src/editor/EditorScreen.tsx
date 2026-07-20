@@ -7,8 +7,9 @@ import {
   addBlock, addConnection, removeConnection, setConnectionLabel,
   moveBlock, resizeBlock, resetLayout, renameDoc, setDescription, clearDoc,
 } from '../core/operations';
-import { getDoc, saveDoc, removeDoc, ConflictError } from '../data/library';
-import { listFlows, resolveFlow, isStarter, type FlowSummary } from '../library/flows';
+import { getDoc, saveDoc, removeDoc, ConflictError, ProtectedError } from '../data/library';
+import { listFlows, resolveFlow, isOfficial, type FlowSummary } from '../library/flows';
+import { StorageModeBanner } from './StorageModeBanner';
 import { DiagramCanvas } from '../canvas/DiagramCanvas';
 import { FishboneCanvas } from '../canvas/FishboneCanvas';
 import { Palette } from './Palette';
@@ -44,18 +45,40 @@ export function EditorScreen() {
   const isFishbone = doc.preset === 'fishbone';
   const connectable = doc.preset === 'flowchart' || doc.preset === 'decisionTree';
   const errors = useMemo(() => getPreset(doc.preset).validate(doc), [doc]);
-  const readOnly = isStarter(doc.id);
+
+  // Official flows open read-only and are unlocked per-document by an explicit confirm.
+  // The confirm is a speed-bump against accidents, not a permission — anyone with the app
+  // password can unlock. Real authorization needs an identity model the app does not have.
+  const [unlockedId, setUnlockedId] = useState<string | null>(null);
+  const official = isOfficial(doc);
+  const readOnly = official && unlockedId !== doc.id;
+
+  const unlockOfficial = () => {
+    const ok = window.confirm(
+      `"${doc.title}" is an official team flow.\n\n` +
+      'Editing changes it for everyone, and there is no version history yet. Continue?',
+    );
+    if (ok) setUnlockedId(doc.id);
+  };
 
   // Keep the library list in sync after a save/rename without re-fetching every keystroke.
+  // Topic and order are server-owned columns, so carry the existing summary's values forward.
   const upsertSummary = useCallback((d: KnowflowDoc) => {
-    setLibrary(prev => [
-      { id: d.id, title: d.title, preset: d.preset, status: d.meta.status, updatedAt: d.meta.updatedAt, starter: false },
-      ...prev.filter(s => s.id !== d.id),
-    ]);
+    setLibrary(prev => {
+      const existing = prev.find(s => s.id === d.id);
+      return [
+        {
+          id: d.id, title: d.title, preset: d.preset, status: d.meta.status,
+          updatedAt: d.meta.updatedAt, official: d.meta.status === 'official',
+          group: existing?.group, sortOrder: existing?.sortOrder,
+        },
+        ...prev.filter(s => s.id !== d.id),
+      ];
+    });
   }, []);
 
   const save = useCallback(async (d: KnowflowDoc) => {
-    if (isStarter(d.id)) return; // starter flows are read-only
+    if (isOfficial(d) && unlockedId !== d.id) return; // locked official flow: nothing to save
     try {
       await saveDoc(d, lastSynced.current ?? undefined);
       lastSynced.current = d.meta.updatedAt;
@@ -64,7 +87,7 @@ export function EditorScreen() {
       if (e instanceof ConflictError) { setConflict(true); throw e; } // surface; leave status not-saved
       throw e;
     }
-  }, [upsertSummary]);
+  }, [upsertSummary, unlockedId]);
   const status = useAutosave(doc, save);
 
   // Load the shared library on startup: open the most recent diagram, or seed a blank one.
@@ -73,8 +96,8 @@ export function EditorScreen() {
     if (booted.current) return; booted.current = true;
     (async () => {
       const list = await listFlows();
-      const mine = list.filter(f => !f.starter).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
-      const first = mine[0] ?? list.find(f => f.starter);
+      const mine = list.filter(f => !f.official).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+      const first = mine[0] ?? list.find(f => f.official);
       if (first) {
         const d = await resolveFlow(first.id);
         if (d) { resetDoc(d); lastSynced.current = d.meta.updatedAt; }
@@ -87,6 +110,7 @@ export function EditorScreen() {
   const switchTo = (next: KnowflowDoc) => {
     resetDoc(next); lastSynced.current = next.meta.updatedAt;
     setSelectedId(null); setSelectedEdgeId(null); setFocusId(null); setConnectMode(false); setConflict(false);
+    setUnlockedId(null); // re-confirm every time an official flow is opened
   };
 
   const takeTheirs = async () => { const theirs = await getDoc(doc.id); if (theirs) switchTo(theirs); setConflict(false); };
@@ -112,7 +136,12 @@ export function EditorScreen() {
   const handleDeleteDoc = async (id: string) => {
     const summary = library.find(s => s.id === id);
     if (!window.confirm(`Delete "${summary?.title || 'this diagram'}"? This can't be undone.`)) return;
-    await removeDoc(id);
+    try {
+      await removeDoc(id);
+    } catch (e) {
+      if (e instanceof ProtectedError) { window.alert(e.message); return; }
+      throw e;
+    }
     const rest = library.filter(s => s.id !== id);
     setLibrary(rest);
     if (id === doc.id) { if (rest.length) openFlow(rest[0].id); else newBlank('flowchart'); }
@@ -191,6 +220,7 @@ export function EditorScreen() {
 
   return (
     <div className="editor">
+      <StorageModeBanner />
       <header className="topbar">
         <div className="topbar-left">
           <span className="brand">know<b>flow</b></span>
@@ -214,7 +244,15 @@ export function EditorScreen() {
             </button>
           )}
           {readOnly ? (
-            <span className="save save-readonly" title="Starter flows are read-only.">Starter · read-only</span>
+            <button className="tbtn unlock" onClick={unlockOfficial}
+              title="Official team flow — click to edit it for everyone.">
+              🔒 Official · Edit
+            </button>
+          ) : official ? (
+            <span className={`save save-${status}`} role="status" aria-live="polite"
+              title="Editing an official flow — changes apply for everyone.">
+              {status === 'saving' ? 'Saving…' : status === 'error' ? '⚠ Not saved' : 'Official · saved ✓'}
+            </span>
           ) : (
             <span className={`save save-${status}`} role="status" aria-live="polite"
               title="Your changes save automatically to the shared library.">

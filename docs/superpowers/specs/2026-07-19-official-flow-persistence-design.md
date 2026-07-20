@@ -4,6 +4,47 @@
 **Status:** Design locked. No code written yet.
 **Implements:** Step 1 of `2026-07-19-backend-persistence-and-ai-provenance-course.md`
 
+## What we are building
+
+Nine changes. Nothing else is in step 1.
+
+**Database**
+
+1. Add `topic` and `sort_order` columns to `documents`, so the topic grouping survives the
+   move. That grouping currently exists only in code. (Named `topic`, not `group` — `group`
+   is a reserved word in Postgres and would need quoting in every query and migration.)
+
+**A script run once, by hand**
+
+2. `npm run seed:flows` copies the 13 flows from code into the database. Never runs
+   automatically.
+
+**Browser code**
+
+3. Read flows from the database, falling back to the code copies when it is unreachable.
+   When a flow exists in both, the database version wins.
+4. Read-only-ness keys off "the flow is marked official" instead of "the id starts with
+   `starter:`". Without this the moved flows still behave as frozen and the change is inert.
+5. Confirmation dialog before editing an official flow.
+
+**Server**
+
+6. On save, ignore what the browser claims about official-vs-draft and keep what the
+   database already has, so nobody can mark their own flow official.
+7. Refuse to delete any flow marked official.
+
+**Warnings and uptime**
+
+8. Visible banner when the database is unreachable, stating changes are not shared. It
+   currently fails silently and users believe they saved.
+9. Daily GitHub Action pings the app so Supabase never idles for 7 days and pauses.
+
+What a user notices afterwards: the flow list looks the same, a confirm dialog appears when
+editing one of the 13, and a warning banner appears if the backend is down. The rest is
+underneath.
+
+Edit history is **step 2**. The AI feature is **step 3** and is not yet designed.
+
 ## Problem
 
 All 13 curated flows live in `src/library/flows/*.ts` — TypeScript modules compiled
@@ -44,7 +85,9 @@ slots on top of this design without redoing it.
 and `listDocs` sorts by `updated_at DESC`. Promoting flows to rows without addressing
 this would silently destroy the topic grouping shipped in PR #8.
 
-- `group` (text, nullable) and `sort_order` (int, nullable) become real columns.
+- `topic` (text, nullable) and `sort_order` (int, nullable) become real columns. The
+  TypeScript field stays `group`; the server maps between them, as it already does for
+  `sort_order` → `sortOrder`.
 - The topic list itself stays a short static array, since it changes rarely.
 
 Real columns rather than fields inside the `data` blob: the database has to sort and
@@ -141,7 +184,7 @@ documents
   description  text  null
   data         jsonb       -- the whole KnowflowDoc
   updated_at   text
-+ group        text  null  -- 'Account & Access'
++ topic        text  null  -- 'Account & Access'
 + sort_order   int   null  -- position within the topic
 ```
 
@@ -150,8 +193,8 @@ two new columns require a migration.
 
 ## Read path
 
-1. `listFlows()` asks the backend for rows, now including `group` and `sort_order`.
-2. Rows with `status = 'official'` render grouped by `group`, ordered by `sort_order`,
+1. `listFlows()` asks the backend for rows, now including `topic` and `sort_order`.
+2. Rows with `status = 'official'` render grouped by topic, ordered by `sort_order`,
    with topics in the order given by the static topic array.
 3. Rows with `status = 'draft'` render as Team flows, as today.
 4. If the backend is unreachable, fall back to the bundled modules as today.

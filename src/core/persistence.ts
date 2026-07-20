@@ -14,6 +14,10 @@ export interface DocSummary {
   preset: Preset;
   status: 'draft' | 'official';
   updatedAt: string;
+  /** Topic title for official flows; absent for team flows. Stored as a column, not in the doc. */
+  group?: string;
+  /** Position within the topic. Stored as a column, not in the doc. */
+  sortOrder?: number;
 }
 
 const KEY = 'knowflow.documents.v1';

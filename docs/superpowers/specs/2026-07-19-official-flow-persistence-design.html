@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>knowflow — Official flow persistence design</title>
+<style>
+  :root {
+    --bg: #FBF8F2; --fg: #1E1C17; --muted: #6B6355; --rule: #E2D8C7;
+    --card: #fff; --accent: #0F766E; --accent-soft: #E6F0EE;
+    --warn: #9A3412; --warn-soft: #FDEDE6; --ok: #14532D; --ok-soft: #E4F3E9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16150F; --fg: #F2EEE4; --muted: #A79D8B; --rule: #38342B;
+      --card: #1F1D16; --accent: #4FD1C5; --accent-soft: #14312E;
+      --warn: #FCA97A; --warn-soft: #35211A; --ok: #86E0A8; --ok-soft: #16301F;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    padding: 40px 20px 80px;
+  }
+  main { max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -.01em; }
+  h2 {
+    font-size: 21px; margin: 40px 0 12px; padding-top: 18px;
+    border-top: 2px solid var(--rule); letter-spacing: -.01em;
+  }
+  h3 { font-size: 16px; margin: 24px 0 8px; color: var(--accent); }
+  p, li { margin: 9px 0; }
+  code {
+    font: 13.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--accent-soft); color: var(--accent);
+    padding: 1.5px 5px; border-radius: 5px;
+  }
+  .meta { color: var(--muted); font-size: 14px; margin: 0 0 4px; }
+  .lede {
+    background: var(--card); border: 1px solid var(--rule); border-left: 4px solid var(--accent);
+    border-radius: 10px; padding: 14px 18px; margin: 22px 0;
+  }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { background: var(--accent-soft); color: var(--accent); font-size: 12.5px; text-transform: uppercase; letter-spacing: .05em; }
+  .wrap { overflow-x: auto; }
+  .tag {
+    display: inline-block; font-size: 11.5px; font-weight: 800; letter-spacing: .06em;
+    padding: 2px 9px; border-radius: 999px; vertical-align: middle; margin-left: 8px;
+  }
+  .tag-warn { background: var(--warn-soft); color: var(--warn); }
+  .tag-ok { background: var(--ok-soft); color: var(--ok); }
+  .callout {
+    background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
+    padding: 14px 18px; margin: 16px 0;
+  }
+  .callout.risk { border-left: 4px solid var(--warn); }
+  .callout.key { border-left: 4px solid var(--accent); }
+  ol.seq { padding-left: 20px; }
+  ol.seq li { margin: 10px 0; }
+  .foot { margin-top: 44px; padding-top: 16px; border-top: 2px solid var(--rule); color: var(--muted); font-size: 14px; }
+  strong { font-weight: 700; }
+  pre {
+    background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
+    padding: 14px 16px; overflow-x: auto;
+    font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  pre code { background: none; color: var(--fg); padding: 0; font-size: 13px; }
+  .add { color: var(--ok); font-weight: 700; }
+</style>
+</head>
+<body>
+<main>
+<p class="meta">2026-07-19 · Design locked, no code written yet</p>
+<h1>Official flow persistence <span class="tag tag-ok">DESIGN LOCKED</span></h1>
+<p class="meta">Implements step 1 of <code>2026-07-19-backend-persistence-and-ai-provenance-course.md</code></p>
+
+<div class="lede">
+<p><strong>In one sentence:</strong> move the 13 curated flows out of bundled code and into
+database rows the team can fix without a deploy — and add the server-side rules that make
+&ldquo;official&rdquo; actually mean something.</p>
+</div>
+
+<h2>Problem</h2>
+<p>All 13 curated flows live in <code>src/library/flows/*.ts</code> — TypeScript modules compiled
+into the JS bundle. They are read-only <em>by accident of architecture</em>, not by design.
+Adding or correcting one requires a code change and a Vercel deploy, so <strong>the team cannot
+fix an error they spot</strong>. That defeats the point of team-owned process documentation.</p>
+
+<h2>Decisions</h2>
+<p>Five decisions locked during brainstorming. Each records the rationale, because the reasoning
+matters more than the choice if this is ever revisited.</p>
+
+<h3>1 · Anyone with the app password may edit an official flow, behind a confirm</h3>
+<p>There is no user identity in this app. <code>api/docs.ts:9</code> compares a shared password
+against <code>APP_PASSWORD</code>; <code>api/login.ts</code> does the same. No token, no expiry,
+no username. A request cannot say <em>who</em> is making it, so role-based rules are not merely
+unbuilt — they are <strong>unrepresentable</strong>.</p>
+<div class="callout risk">
+<p><strong>This is a speed-bump, not a permission.</strong> It prevents accidents, not intent.
+Say this plainly to the supervisor — nobody should believe official flows are locked.</p>
+</div>
+<p>Real auth is deferred until the team has actually adopted the tool. Adding it later slots on
+top of this design without redoing it.</p>
+
+<h3>2 · Grouping moves to columns; the topic list stays in code</h3>
+<p><code>STARTER_GROUPS</code> holds topic titles, display order and <code>defaultCollapsed</code>
+— all in code. The <code>documents</code> table has no group or ordering column, and
+<code>listDocs</code> sorts by <code>updated_at</code>. Promoting flows to rows without addressing
+this would <strong>silently destroy the topic grouping shipped in PR #8</strong>.</p>
+<p>Real columns rather than fields inside the <code>data</code> blob: the database has to sort and
+group by these, and it cannot see inside JSON without awkward, slow queries. Content stays in the
+blob; anything queried or sorted by gets promoted to a column.</p>
+
+<h3>3 · Seeding is a one-time manual script; modules stay bundled</h3>
+<p><code>npm run seed:flows</code> upserts the 13 flows by id. It runs by hand, once. It never runs
+on deploy and never on app boot.</p>
+<div class="callout key">
+<p><strong>The trap this avoids:</strong> &ldquo;flow is absent&rdquo; is ambiguous — it can mean
+<em>never seeded</em> or <em>deliberately retired</em>. Any mechanism that seeds on absence
+resurrects flows the team intentionally removed, forever. Seeding on deploy has the same defect on
+a slower clock. Seeding on boot additionally writes to the shared library as a side effect of
+merely opening the app, with every client racing.</p>
+</div>
+<p><strong>Accepted cost:</strong> two copies of each flow now exist — the row (authoritative) and
+the code copy (backup). Editing in the app leaves the code copy stale. Treat the modules as frozen
+seed material and never hand-edit them again. Accepted because losing the whole library when
+Supabase hiccups is worse than drift.</p>
+
+<h3>4 · Ids stay exactly as they are</h3>
+<p><code>linkTo</code> stores raw id strings <strong>inside the JSON blob</strong> —
+<code>secIntake.ts</code> alone has five, with more across <code>resetPassword</code>,
+<code>twoFactor</code>, <code>secRemediation</code> and <code>secCompromisedAccount</code>. Ids are
+a link graph, not just keys. Renaming one later means rewriting the row id <em>and</em> every
+<code>linkTo</code> string inside every other document&rsquo;s JSON, plus any team forks by then.</p>
+<p>The <code>starter:</code> prefix becomes a slight misnomer. That is cosmetic and not worth
+migration risk.</p>
+<p><strong>Nothing is expected to force a change.</strong> Ids are opaque strings — no constraint
+comes from Postgres, Supabase, Vercel or the code; forks receive fresh ids so collisions cannot
+arise; and they would survive a migration off Supabase entirely. The only realistic pressure is
+cosmetic (a flow renamed conceptually, someone feeling the id should match), which should be
+resisted. The guard rail already exists: <code>starterFlows.test.ts:52</code> asserts every
+<code>linkTo</code> resolves, so an id change that orphans a link <strong>fails the suite before it
+ships</strong>. That invariant must be extended to seeded rows.</p>
+
+<h3>5 · <code>status</code> cannot change on save; delete of official is refused</h3>
+<div class="callout key">
+<p><strong>The server applies no judgment and has no criterion.</strong> It does not decide which
+flows deserve to be official. The rule is mechanical: <em>saving a flow cannot change whether it is
+official</em> — the server keeps whatever the row already had, the same way saving a document cannot
+change who owns it.</p>
+</div>
+<p><code>api/docs.ts:19-20</code> passes the client&rsquo;s document straight to
+<code>saveDoc</code> with <strong>no validation</strong>, and <code>src/server/docs.ts:43</code>
+writes <code>status: doc.meta.status</code> — the value <em>the client sent</em>. As it stands, any
+client can save a document marked <code>official</code>.</p>
+<div class="callout risk">
+<p>Combined with the delete guard, that would let anyone create a flow <strong>nobody can delete
+through the app</strong>. A permission model keyed off a client-controlled field protects nothing.</p>
+</div>
+<ul>
+<li>A normal save never changes status; the value is read from the existing row.</li>
+<li>Promotion to <code>official</code> happens <strong>only via the seed script</strong>, never through the app.</li>
+<li><code>deleteDoc</code> reads the row&rsquo;s status first and refuses when it is official.</li>
+</ul>
+<p>Delete is asymmetric from edit on purpose: edits are visible and correctable, deletes are silent
+and permanent, and this app has no history.</p>
+<p><strong>Who has final say, and why this is not deferred authorization.</strong> Promotion happens
+outside the app, by running a script that requires the Supabase service key. The
+&ldquo;qualified individual&rdquo; gate is therefore <em>physical access to the credential</em> — the
+strongest control currently available, and it costs nothing to build.</p>
+<p>The tripwire for when this stops being sufficient: <strong>the day someone who is not the repo
+owner needs to promote a flow without using a terminal.</strong> At that point the cheap step is a
+second admin secret gating an in-app promote action — defensible for a rare, high-stakes operation
+even though it was rejected for everyday editing. Full user accounts are only required if promotion
+rights must differ <em>between</em> team members.</p>
+
+<h2>Data model</h2>
+<div class="wrap">
+<pre><code>documents
+  id           text  pk
+  title        text
+  preset       text
+  status       text        -- already exists: 'draft' | 'official'
+  description  text  null
+  data         jsonb       -- the whole KnowflowDoc
+  updated_at   text
+<span class="add">+ group        text  null  -- 'Account &amp; Access'</span>
+<span class="add">+ sort_order   int   null  -- position within the topic</span></code></pre>
+</div>
+<p><code>status</code> already round-trips through Postgres. Only the two new columns require a
+migration.</p>
+
+<h2>Read path</h2>
+<ol class="seq">
+<li>Ask the backend for rows, now including <code>group</code> and <code>sort_order</code>.</li>
+<li>Official rows render grouped by <code>group</code>, ordered by <code>sort_order</code>, topics in the order given by the static topic array.</li>
+<li>Draft rows render as Team flows, as today.</li>
+<li>If the backend is unreachable, fall back to the bundled modules as today.</li>
+<li>When a row and a bundled module share an id, <strong>the row wins</strong>; modules only fill gaps.</li>
+</ol>
+<p><code>isStarter()</code> currently tests <code>id.startsWith('starter:')</code>. Read-only-ness
+must key off <code>status === 'official'</code> instead, or the seeded rows would still be treated
+as untouchable bundle content and <strong>the change would be inert</strong>.</p>
+
+<h2>Backend availability <span class="tag tag-warn">SCHEDULED FAILURE</span></h2>
+<h3>The failure mode is not hypothetical</h3>
+<p>Supabase pauses Free Plan projects after roughly <strong>7 days</strong> of insufficient database
+activity. Two properties make this serious:</p>
+<ul>
+<li><strong>A paused project does not wake on request.</strong> Restoring it requires opening the
+Supabase dashboard and clicking <em>Resume project</em>. The app stays broken until a human intervenes.</li>
+<li><strong>Restoration expires.</strong> After 90 days paused, the project can no longer be restored
+through Studio; recovery means downloading backups and migrating to a new project.</li>
+</ul>
+<p>A service desk consults flows during incidents rather than daily — precisely the usage profile
+that gets paused. This retroactively strengthens decision 3: the bundled modules guard against a
+<strong>predictable recurring event</strong>, not a rare hiccup. Without them, a paused project means
+the team opens the app and sees nothing.</p>
+
+<h3>Keep-alive — removes the failure mode</h3>
+<p>A daily GitHub Actions job issues one authenticated <code>GET /api/docs</code>, which runs a real
+<code>select</code> against the table. Routing through the app&rsquo;s own API rather than straight at
+Supabase exercises the full user path — Vercel function, password gate, database query — so the job
+<strong>doubles as monitoring</strong>: <code>curl -f</code> fails on any non-2xx and GitHub emails on
+a failed scheduled run.</p>
+<div class="callout risk">
+<p><strong>Two caveats for implementation.</strong> (1) Verify empirically that read activity alone
+prevents pausing — the docs say &ldquo;a few user requests to the database each day&rdquo; without
+distinguishing reads from writes; confirm the project survives two quiet weeks. (2) GitHub disables
+scheduled workflows in repos with no commits for 60 days, which would silently kill the keep-alive on
+a quiet repo. Include <code>workflow_dispatch</code> for manual re-trigger.</p>
+</div>
+
+<h3>Offline indicator — the backstop</h3>
+<p><code>src/data/library.ts</code> silently flips to local storage on failure and tells the user
+nothing. <strong>This change makes that materially worse.</strong> Today those flows are honestly
+read-only. After this change, an offline user sees the bundled copies, edits one believing they are
+fixing team content, and saves it to their own browser. It looks like it worked. Nobody else ever
+sees it.</p>
+<div class="wrap">
+<table>
+<tr><th>State</th><th>Meaning</th><th>Treatment</th></tr>
+<tr><td>Not configured (501)</td><td>Local development, no Supabase</td><td>Quiet notice; harmless</td></tr>
+<tr><td>Unreachable / paused</td><td>Backend down or paused — <strong>changes are not shared</strong></td><td>Persistent, prominent</td></tr>
+</table>
+</div>
+<p>Exact wording is settled during implementation. The requirement is that the second state is
+<strong>never silent</strong>.</p>
+
+<h2>Non-goals</h2>
+<p>Out of scope and safely deferrable — these add columns or policies later without rewriting this
+work: user accounts and roles, per-user ownership, migrating to Supabase RLS, splitting the shared
+library into scopes, and fork-to-edit (decision 1 makes editing in place the primary path).</p>
+<div class="callout risk">
+<p><strong>Deferred but scheduled next — edit history (step 2).</strong> Overwriting an official
+flow is unguarded and this app has no version history. A second append-only table fixes it whenever
+it is built.</p>
+<p>Scoping the risk honestly: the <strong>original 13 flows are in git permanently</strong> and the
+seed script restores them, so the curated baseline is never truly lost. What is at risk is only
+<em>improvements made after seeding</em> — a colleague&rsquo;s genuine correction clobbered by a later
+bad save. That is a real but much narrower exposure, which is why history is scheduled next rather
+than folded into step 1.</p>
+</div>
+
+<h2>Testing</h2>
+<ul>
+<li>Seed script is idempotent — running it twice produces 13 rows, not 26.</li>
+<li>A save carrying <code>status: 'official'</code> from the client does <strong>not</strong> promote a draft.</li>
+<li><code>DELETE</code> on an official row is refused; on a draft row it still succeeds.</li>
+<li>Official rows render grouped and ordered, matching the current UI.</li>
+<li>Row wins over bundled module when both share an id.</li>
+<li>Backend unreachable falls back to modules <em>and</em> surfaces the offline indicator.</li>
+<li>Existing <code>starterFlows.test.ts</code> / <code>flows.test.ts</code> follow the read-path change; the &ldquo;every <code>linkTo</code> resolves&rdquo; invariant must still hold.</li>
+</ul>
+
+<h2>Risks</h2>
+<div class="wrap">
+<table>
+<tr><th>Risk</th><th>Mitigation</th></tr>
+<tr><td>Free-tier project pauses after ~7 days idle</td><td>Daily keep-alive cron; bundled modules keep the app usable meanwhile</td></tr>
+<tr><td>Keep-alive itself silently stops</td><td>GitHub disables cron on repos idle 60 days — <code>workflow_dispatch</code> allows manual re-trigger</td></tr>
+<tr><td>Code copies drift from rows</td><td>Modules are frozen seed material; never hand-edited</td></tr>
+<tr><td>Confirm dialog read as security</td><td>State plainly that it is a speed-bump, not a permission</td></tr>
+<tr><td>Bad edit destroys a post-seed improvement</td><td>Step 2 (history). Originals remain in git and restorable via seed</td></tr>
+<tr><td>Seed run against the wrong project</td><td>Script requires an explicit env var; prints target before writing</td></tr>
+</table>
+</div>
+
+<p class="foot">Design locked 2026-07-19. Next step: implementation plan — no code until this
+document is reviewed.</p>
+</main>
+</body>
+</html>

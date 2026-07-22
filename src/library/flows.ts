@@ -4,37 +4,57 @@ import { listDocs, getDoc } from '../data/library';
 import { STARTER_FLOWS, STARTER_GROUPS } from './starterFlows';
 
 export interface FlowSummary extends DocSummary {
-  /** True for bundled, read-only starter flows. */
-  starter: boolean;
-  /** Topic title for starters; undefined for the user's own (Team) flows. */
-  group?: string;
+  /** True for curated team content: read-only until deliberately unlocked. */
+  official: boolean;
 }
 
-/** Starter (bundled, read-only) flows use this id prefix; nothing else does. */
-export function isStarter(id: string): boolean {
-  return id.startsWith('starter:');
+/**
+ * Curated flows are identified by status, not by id.
+ *
+ * This deliberately replaces the old `id.startsWith('starter:')` test. Once the curated flows
+ * live in the database, an id-prefix check would still treat them as untouchable bundle
+ * content and the whole change would be inert.
+ */
+export function isOfficial(doc: { meta: { status: string } }): boolean {
+  return doc.meta.status === 'official';
 }
 
-function summarize(d: KnowflowDoc): DocSummary {
-  return { id: d.id, title: d.title, preset: d.preset, status: d.meta.status, updatedAt: d.meta.updatedAt };
+/** Topic + position for each bundled flow, used only when a row is missing (offline / unseeded). */
+const BUNDLED_PLACEMENT = new Map<string, { group: string; sortOrder: number }>(
+  STARTER_GROUPS.flatMap(g => g.flows.map((f, i) => [f.id, { group: g.title, sortOrder: i }] as const)),
+);
+
+function summarize(d: KnowflowDoc): FlowSummary {
+  const placement = BUNDLED_PLACEMENT.get(d.id);
+  return {
+    id: d.id, title: d.title, preset: d.preset, status: d.meta.status, updatedAt: d.meta.updatedAt,
+    group: placement?.group, sortOrder: placement?.sortOrder,
+    official: isOfficial(d),
+  };
 }
 
-/** A starter flow (by id, as a fresh clone) or a stored library doc. Null if neither. */
+/**
+ * A stored document, falling back to the bundled copy when no row exists.
+ * The row always wins — bundled modules are seed material and an offline fallback, not truth.
+ */
 export async function resolveFlow(id: string): Promise<KnowflowDoc | null> {
-  if (isStarter(id)) {
-    const found = STARTER_FLOWS.find(f => f.id === id);
-    return found ? structuredClone(found) : null;
-  }
-  return getDoc(id);
+  const stored = await getDoc(id);
+  if (stored) return stored;
+  const bundled = STARTER_FLOWS.find(f => f.id === id);
+  return bundled ? structuredClone(bundled) : null;
 }
 
-/** All flows for the Diagrams panel: bundled starters first (by topic), then stored docs. */
+/**
+ * All flows for the Diagrams panel: stored rows, plus any bundled flow that has no row yet.
+ * A bundled flow appears only when its id is absent from storage, so seeded flows are never
+ * listed twice.
+ */
 export async function listFlows(): Promise<FlowSummary[]> {
   const stored = await listDocs();
+  const storedIds = new Set(stored.map(s => s.id));
+  const unseeded = STARTER_FLOWS.filter(f => !storedIds.has(f.id)).map(summarize);
   return [
-    ...STARTER_GROUPS.flatMap(g =>
-      g.flows.map(f => ({ ...summarize(f), starter: true, group: g.title })),
-    ),
-    ...stored.map(s => ({ ...s, starter: false })),
+    ...stored.map(s => ({ ...s, official: s.status === 'official' })),
+    ...unseeded,
   ];
 }

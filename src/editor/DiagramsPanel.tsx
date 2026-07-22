@@ -3,7 +3,7 @@ import type { Preset } from '../core/types';
 import { ALL_PRESETS } from '../core/types';
 import { getPreset } from '../core/presets';
 import type { FlowSummary } from '../library/flows';
-import { STARTER_GROUPS, STARTER_FLOWS } from '../library/starterFlows';
+import { STARTER_GROUPS } from '../library/starterFlows';
 import './DiagramsPanel.css';
 
 interface Props {
@@ -16,12 +16,10 @@ interface Props {
 }
 
 const TEAM_GROUP = 'Team flows';
-/** Starter topics collapsed on first render (session-only). */
+/** Official topics collapsed on first render (session-only). */
 const DEFAULT_COLLAPSED = new Set(
   STARTER_GROUPS.filter(g => g.defaultCollapsed).map(g => g.title),
 );
-/** Curated display order for starters — the registry, not the caller's updatedAt sort. */
-const STARTER_ORDER = new Map(STARTER_FLOWS.map((f, i) => [f.id, i]));
 
 interface GroupProps {
   title: string;
@@ -53,8 +51,8 @@ export function DiagramsPanel({ docs, activeId, onOpen, onNew, onGenerate, onDel
       return next;
     });
 
-  // Starter topics in registry order that actually have flows loaded, then Team flows.
-  const starterTitles = STARTER_GROUPS.map(g => g.title).filter(t => docs.some(d => d.group === t));
+  // Official topics in registry order that actually have flows loaded, then Team flows.
+  const officialTitles = STARTER_GROUPS.map(g => g.title).filter(t => docs.some(d => d.group === t));
 
   const row = (d: FlowSummary) => (
     <div key={d.id} className={`dp-doc ${d.id === activeId ? 'on' : ''}`} onClick={() => onOpen(d.id)}>
@@ -62,14 +60,14 @@ export function DiagramsPanel({ docs, activeId, onOpen, onNew, onGenerate, onDel
         <span className="dp-doc-title">{d.title || '(untitled)'}</span>
         <span className="dp-doc-meta"><span className="dp-chip">{getPreset(d.preset).name}</span></span>
       </div>
-      {!d.starter && (
+      {!d.official && (
         <button className="dp-del" title="Delete" aria-label="Delete diagram"
           onClick={e => { e.stopPropagation(); onDelete(d.id); }}>×</button>
       )}
     </div>
   );
 
-  const mine = docs.filter(d => !d.starter);
+  const mine = docs.filter(d => !d.official);
 
   return (
     <div className="dp">
@@ -82,10 +80,10 @@ export function DiagramsPanel({ docs, activeId, onOpen, onNew, onGenerate, onDel
       </select>
 
       <div className="dp-scroll">
-        {starterTitles.map(title => {
+        {officialTitles.map(title => {
           const flows = docs
             .filter(d => d.group === title)
-            .sort((a, b) => (STARTER_ORDER.get(a.id) ?? 0) - (STARTER_ORDER.get(b.id) ?? 0));
+            .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
           return (
             <CollapsibleGroup key={title} title={title} count={flows.length}
               collapsed={collapsed.has(title)} onToggle={() => toggle(title)}>

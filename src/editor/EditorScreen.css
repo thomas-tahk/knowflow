@@ -146,3 +146,6 @@
 .ro-note { padding: 14px 16px; color: var(--ink2, #5C564B); font-size: 14px; }
 .ro-note p { margin: 0 0 10px; }
 .save-readonly { color: var(--muted, #978D7C); font-style: italic; }
+/* Official flow, locked: the unlock affordance, not a passive badge. */
+.tbtn.unlock { border-color: #C8A24B; color: #8A6A17; background: #FDF6E3; }
+.tbtn.unlock:hover { border-color: #8A6A17; color: #6B510F; background: #FAEFD2; }

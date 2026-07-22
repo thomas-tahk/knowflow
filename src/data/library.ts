@@ -73,10 +73,10 @@ export async function getDoc(id: string): Promise<KnowflowDoc | null> {
   } catch { setMode('offline'); return local.load(id); }
 }
 
-export async function saveDoc(doc: KnowflowDoc, base?: string | null): Promise<void> {
+export async function saveDoc(doc: KnowflowDoc, base?: string | null, opts?: { forceArchive?: boolean }): Promise<void> {
   if (usingLocal()) { local.save(doc); return; }
   try {
-    const res = await call('', { method: 'PUT', body: JSON.stringify({ doc, base }) });
+    const res = await call('', { method: 'PUT', body: JSON.stringify({ doc, base, forceArchive: opts?.forceArchive }) });
     if (res.status === 501) { setMode('unconfigured'); local.save(doc); return; }
     if (res.status === 409) throw new ConflictError();
     if (res.status === 403) throw new ProtectedError();

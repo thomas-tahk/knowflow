@@ -67,6 +67,14 @@ Rules, applied in order on every save of an existing row:
    archived less than 10 minutes ago. One editing burst → one version (the state from
    just before the burst began). Long sessions still get a snapshot every ~10 minutes.
 
+**Amendment (2026-07-22, found in the visual pass):** the coalesce rule must NOT apply to
+restores. Restoring within 10 minutes of an edit skipped the archive of the replaced current
+version — destroying it, the exact loss this table exists to prevent. Restore saves now send
+`forceArchive: true`; the server then bypasses only the *recency* check (never the
+unchanged-content check). Safe direction: a client can force more archiving, never less.
+The restore confirm also states the version's title + block count, so restoring a blank
+early snapshot can't masquerade as "just untitled".
+
 ### 3. Archive failure fails the save, loudly
 
 If the history insert errors, the save returns 500 and the editor shows "⚠ Not saved".

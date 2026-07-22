@@ -184,6 +184,22 @@ describe('saveDoc — archives the outgoing row into document_versions', () => {
   });
 });
 
+describe('saveDoc — forceArchive (the restore path)', () => {
+  it('archives even when the newest version is fresh (restore must never destroy current)', async () => {
+    state.existing = outgoingRow();
+    state.versions.queryResult = [{ archived_at: new Date(Date.now() - 60_000).toISOString() }];
+    await saveDoc(editedDoc(), null, { forceArchive: true });
+    expect(state.versions.inserted).toHaveLength(1);
+    expect(state.versions.inserted[0]).toMatchObject({ doc_id: 'd1', doc_updated_at: 'old-token' });
+  });
+
+  it('still archives nothing when content is unchanged (same token)', async () => {
+    state.existing = outgoingRow({ updated_at: 't' }); // matches doc().meta.updatedAt
+    await saveDoc(doc(), null, { forceArchive: true });
+    expect(state.versions.inserted).toHaveLength(0);
+  });
+});
+
 describe('deleteDoc — official rows are protected', () => {
   it('refuses to delete an official row', async () => {
     state.existing = { status: 'official', topic: 'g', sort_order: 0, updated_at: 't' };

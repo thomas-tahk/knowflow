@@ -42,7 +42,7 @@ export default defineConfig(({ mode }) => {
                 const mod = await server.ssrLoadModule('/src/server/docs.ts')
                 let result: unknown = { ok: true }
                 if (req.method === 'GET') result = id ? await mod.getDoc(id) : await mod.listDocs()
-                else if (req.method === 'PUT' || req.method === 'POST') await mod.saveDoc(payload.doc, payload.base)
+                else if (req.method === 'PUT' || req.method === 'POST') await mod.saveDoc(payload.doc, payload.base, { forceArchive: payload.forceArchive === true })
                 else if (req.method === 'DELETE') await mod.deleteDoc(id)
                 else { res.statusCode = 405; res.end('Method Not Allowed'); return }
                 res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(result))

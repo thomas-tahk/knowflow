@@ -135,14 +135,18 @@ export function EditorScreen() {
   // path: conflict check, server-owned status/topic/order, and archiving of the replaced
   // version all come for free — so a restore is itself undoable.
   const restoreVersion = async (versionDoc: KnowflowDoc, archivedAt: string) => {
+    const blocks = versionDoc.blocks.length;
     const ok = window.confirm(
-      `Restore the version from ${new Date(archivedAt).toLocaleString()}?\n\n` +
+      `Restore "${versionDoc.title || 'Untitled'}" (${blocks} block${blocks === 1 ? '' : 's'}) ` +
+      `from ${new Date(archivedAt).toLocaleString()}?\n\n` +
       'The current version is archived to history first, so this can be undone the same way.',
     );
     if (!ok) return;
     const restored = { ...versionDoc, meta: { ...versionDoc.meta, updatedAt: new Date().toISOString() } };
     try {
-      await saveDoc(restored, lastSynced.current ?? undefined);
+      // forceArchive: a restore replaces the current version wholesale — it must be
+      // archived even if the burst-coalescing window would normally skip it.
+      await saveDoc(restored, lastSynced.current ?? undefined, { forceArchive: true });
     } catch (e) {
       if (e instanceof ConflictError) { setPreview(null); setShowHistory(false); setConflict(true); return; }
       throw e;

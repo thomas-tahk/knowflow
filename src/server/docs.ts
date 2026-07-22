@@ -85,18 +85,23 @@ async function insertVersion(c: SupabaseClient, docId: string, row: ExistingRow)
 
 /** Archive the outgoing row before an overwrite — unless the content is unchanged
  *  (identical conflict token: opening a flow re-saves identical content 600ms later)
- *  or the newest version is under 10 minutes old (coalesces autosave bursts). */
-async function archiveOutgoing(c: SupabaseClient, existing: ExistingRow, doc: KnowflowDoc): Promise<void> {
+ *  or the newest version is under 10 minutes old (coalesces autosave bursts).
+ *  `force` (the restore path) bypasses only the recency check: a restore replaces the
+ *  current version wholesale, and coalescing it away would destroy that state — the
+ *  exact loss this table exists to prevent. Clients can force MORE archiving, never less. */
+async function archiveOutgoing(c: SupabaseClient, existing: ExistingRow, doc: KnowflowDoc, force: boolean): Promise<void> {
   if (existing.updatedAt === doc.meta.updatedAt) return;
-  const { data, error } = await c.from(VERSIONS_TABLE)
-    .select('archived_at').eq('doc_id', doc.id).order('archived_at', { ascending: false }).limit(1);
-  if (error) throw new Error(error.message);
-  const newest = data?.[0]?.archived_at;
-  if (newest && Date.now() - new Date(newest).getTime() < COALESCE_MS) return;
+  if (!force) {
+    const { data, error } = await c.from(VERSIONS_TABLE)
+      .select('archived_at').eq('doc_id', doc.id).order('archived_at', { ascending: false }).limit(1);
+    if (error) throw new Error(error.message);
+    const newest = data?.[0]?.archived_at;
+    if (newest && Date.now() - new Date(newest).getTime() < COALESCE_MS) return;
+  }
   await insertVersion(c, doc.id, existing);
 }
 
-export async function saveDoc(doc: KnowflowDoc, base?: string | null): Promise<void> {
+export async function saveDoc(doc: KnowflowDoc, base?: string | null, opts?: { forceArchive?: boolean }): Promise<void> {
   const c = client();
 
   // Saving can never change status, topic or order: they are read back from the stored row,
@@ -107,7 +112,7 @@ export async function saveDoc(doc: KnowflowDoc, base?: string | null): Promise<v
 
   // The outgoing row is archived before every overwrite, server-side, so no client bug
   // can skip the safety net. Failure here fails the whole save (throws).
-  if (existing) await archiveOutgoing(c, existing, doc);
+  if (existing) await archiveOutgoing(c, existing, doc, opts?.forceArchive === true);
 
 
   const row = {

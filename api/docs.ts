@@ -16,8 +16,8 @@ export default async function handler(req: any, res: any) {
       res.status(200).json(await listDocs()); return;
     }
     if (req.method === 'PUT' || req.method === 'POST') {
-      const { doc, base } = req.body ?? {};
-      await saveDoc(doc, base);
+      const { doc, base, forceArchive } = req.body ?? {};
+      await saveDoc(doc, base, { forceArchive: forceArchive === true });
       res.status(200).json({ ok: true }); return;
     }
     if (req.method === 'DELETE') { await deleteDoc(String(req.query?.id)); res.status(200).json({ ok: true }); return; }

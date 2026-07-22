@@ -20,6 +20,9 @@ export class OfficialProtected extends Error {
 }
 
 const TABLE = 'documents';
+const VERSIONS_TABLE = 'document_versions';
+/** One editing burst → one version: skip archiving while the newest version is this fresh. */
+const COALESCE_MS = 10 * 60 * 1000;
 let cached: SupabaseClient | null = null;
 
 function client(): SupabaseClient {
@@ -46,16 +49,19 @@ export async function getDoc(id: string): Promise<KnowflowDoc | null> {
   return (data?.data as KnowflowDoc | undefined) ?? null;
 }
 
-/** Columns the server owns — a client save may never set these. */
-interface ServerOwned {
+/** The stored row: server-owned columns (a client save may never set these) plus the
+ *  outgoing content (`title`, `data`) that gets archived before an overwrite. */
+interface ExistingRow {
   status: 'draft' | 'official';
   group: string | null;
   sortOrder: number | null;
   updatedAt: string | null;
+  title: string | null;
+  data: unknown;
 }
 
-async function readServerOwned(c: SupabaseClient, id: string): Promise<ServerOwned | null> {
-  const { data, error } = await c.from(TABLE).select('status,topic,sort_order,updated_at').eq('id', id).maybeSingle();
+async function readExisting(c: SupabaseClient, id: string): Promise<ExistingRow | null> {
+  const { data, error } = await c.from(TABLE).select('status,topic,sort_order,updated_at,title,data').eq('id', id).maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return null;
   return {
@@ -63,17 +69,52 @@ async function readServerOwned(c: SupabaseClient, id: string): Promise<ServerOwn
     group: data.topic ?? null,
     sortOrder: data.sort_order ?? null,
     updatedAt: data.updated_at ?? null,
+    title: data.title ?? null,
+    data: data.data ?? null,
   };
 }
 
-export async function saveDoc(doc: KnowflowDoc, base?: string | null): Promise<void> {
+/** Append the outgoing row to `document_versions`. Throws on failure — a save that
+ *  cannot archive must not overwrite (a silently absent safety net is not a safety net). */
+async function insertVersion(c: SupabaseClient, docId: string, row: ExistingRow): Promise<void> {
+  const { error } = await c.from(VERSIONS_TABLE).insert({
+    doc_id: docId, title: row.title, data: row.data, doc_updated_at: row.updatedAt,
+  });
+  if (error) throw new Error(error.message);
+}
+
+/** Archive the outgoing row before an overwrite — unless the content is unchanged
+ *  (identical conflict token: opening a flow re-saves identical content 600ms later)
+ *  or the newest version is under 10 minutes old (coalesces autosave bursts).
+ *  `force` (the restore path) bypasses only the recency check: a restore replaces the
+ *  current version wholesale, and coalescing it away would destroy that state — the
+ *  exact loss this table exists to prevent. Clients can force MORE archiving, never less. */
+async function archiveOutgoing(c: SupabaseClient, existing: ExistingRow, doc: KnowflowDoc, force: boolean): Promise<void> {
+  if (existing.updatedAt === doc.meta.updatedAt) return;
+  if (!force) {
+    const { data, error } = await c.from(VERSIONS_TABLE)
+      .select('archived_at').eq('doc_id', doc.id).order('archived_at', { ascending: false }).limit(1);
+    if (error) throw new Error(error.message);
+    const newest = data?.[0]?.archived_at;
+    if (newest && Date.now() - new Date(newest).getTime() < COALESCE_MS) return;
+  }
+  await insertVersion(c, doc.id, existing);
+}
+
+export async function saveDoc(doc: KnowflowDoc, base?: string | null, opts?: { forceArchive?: boolean }): Promise<void> {
   const c = client();
 
   // Saving can never change status, topic or order: they are read back from the stored row,
   // never taken from the client. Without this, any client could mark its own doc 'official'
   // (and, with the delete guard below, make it undeletable through the app).
-  const existing = await readServerOwned(c, doc.id);
+  const existing = await readExisting(c, doc.id);
   const status = existing?.status ?? 'draft';
+
+  // The outgoing row is archived before every overwrite, server-side, so no client bug
+  // can skip the safety net. Failure here fails the whole save (throws).
+  if (existing) await archiveOutgoing(c, existing, doc, opts?.forceArchive === true);
+
+
   const row = {
     id: doc.id, title: doc.title, preset: doc.preset, status,
     topic: existing?.group ?? null,
@@ -107,10 +148,33 @@ export async function saveDoc(doc: KnowflowDoc, base?: string | null): Promise<v
 
 export async function deleteDoc(id: string): Promise<void> {
   const c = client();
-  // Official flows are curated team content with no version history — removal is deliberate,
-  // and happens through the seed script, not through the app.
-  const existing = await readServerOwned(c, id);
+  // Official flows are curated team content — removal is deliberate, and happens
+  // through the seed script, not through the app.
+  const existing = await readExisting(c, id);
   if (existing?.status === 'official') throw new OfficialProtected('Official flows cannot be deleted.');
+  // Archive unconditionally (no coalescing — this is the last copy). No undelete UI in v1;
+  // recovery is a manual SQL query against document_versions.
+  if (existing) await insertVersion(c, id, existing);
   const { error } = await c.from(TABLE).delete().eq('id', id);
   if (error) throw new Error(error.message);
+}
+
+export interface VersionSummary {
+  id: number;
+  docId: string;
+  title: string | null;
+  archivedAt: string;
+}
+
+export async function listVersions(docId: string): Promise<VersionSummary[]> {
+  const { data, error } = await client().from(VERSIONS_TABLE)
+    .select('id,doc_id,title,archived_at').eq('doc_id', docId).order('archived_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(r => ({ id: r.id, docId: r.doc_id, title: r.title, archivedAt: r.archived_at }));
+}
+
+export async function getVersion(id: number): Promise<KnowflowDoc | null> {
+  const { data, error } = await client().from(VERSIONS_TABLE).select('data').eq('id', id).maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data?.data as KnowflowDoc | undefined) ?? null;
 }

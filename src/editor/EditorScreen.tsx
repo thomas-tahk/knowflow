@@ -17,6 +17,7 @@ import { Inspector } from './Inspector';
 import { EdgeInspector } from './EdgeInspector';
 import { DiagramsPanel } from './DiagramsPanel';
 import { GeneratePanel } from './GeneratePanel';
+import { HistoryModal } from './HistoryModal';
 import { ValidationHints } from './ValidationHints';
 import { FeedbackModal } from './FeedbackButton';
 import { useAutosave } from './useAutosave';
@@ -33,6 +34,11 @@ export function EditorScreen() {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [connectMode, setConnectMode] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  // A previewed old version renders in the canvas as its own state, never as `doc` —
+  // the autosave hook only watches `doc`, so previewing can't save old content over
+  // the current version (safe by construction, not by a guard flag).
+  const [preview, setPreview] = useState<{ doc: KnowflowDoc; archivedAt: string } | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [leftOpen, setLeftOpen] = useState(true);
@@ -42,9 +48,13 @@ export function EditorScreen() {
   // The server version we last synced with — used to detect a concurrent edit by someone else.
   const lastSynced = useRef<string | null>(null);
 
-  const isFishbone = doc.preset === 'fishbone';
-  const connectable = doc.preset === 'flowchart' || doc.preset === 'decisionTree';
-  const errors = useMemo(() => getPreset(doc.preset).validate(doc), [doc]);
+  // What the canvas and topbar display: the previewed old version, or the live doc.
+  const previewing = preview !== null;
+  const shown = preview?.doc ?? doc;
+
+  const isFishbone = shown.preset === 'fishbone';
+  const connectable = shown.preset === 'flowchart' || shown.preset === 'decisionTree';
+  const errors = useMemo(() => getPreset(shown.preset).validate(shown), [shown]);
 
   // Official flows open read-only and are unlocked per-document by an explicit confirm.
   // The confirm is a speed-bump against accidents, not a permission — anyone with the app
@@ -56,7 +66,8 @@ export function EditorScreen() {
   const unlockOfficial = () => {
     const ok = window.confirm(
       `"${doc.title}" is an official team flow.\n\n` +
-      'Editing changes it for everyone, and there is no version history yet. Continue?',
+      'Editing changes it for everyone. The previous version is kept in history ' +
+      '(⋯ More → Version history), so mistakes can be undone. Continue?',
     );
     if (ok) setUnlockedId(doc.id);
   };
@@ -111,6 +122,42 @@ export function EditorScreen() {
     resetDoc(next); lastSynced.current = next.meta.updatedAt;
     setSelectedId(null); setSelectedEdgeId(null); setFocusId(null); setConnectMode(false); setConflict(false);
     setUnlockedId(null); // re-confirm every time an official flow is opened
+    setPreview(null); setShowHistory(false);
+  };
+
+  const previewVersion = (versionDoc: KnowflowDoc, archivedAt: string) => {
+    setPreview({ doc: versionDoc, archivedAt });
+    setShowHistory(false);
+    setSelectedId(null); setSelectedEdgeId(null); setFocusId(null); setConnectMode(false);
+  };
+
+  // Restore = load the old version and save it as the new current, through the normal save
+  // path: conflict check, server-owned status/topic/order, and archiving of the replaced
+  // version all come for free — so a restore is itself undoable.
+  const restoreVersion = async (versionDoc: KnowflowDoc, archivedAt: string) => {
+    const blocks = versionDoc.blocks.length;
+    const ok = window.confirm(
+      `Restore "${versionDoc.title || 'Untitled'}" (${blocks} block${blocks === 1 ? '' : 's'}) ` +
+      `from ${new Date(archivedAt).toLocaleString()}?\n\n` +
+      'The current version is archived to history first, so this can be undone the same way.',
+    );
+    if (!ok) return;
+    const restored = { ...versionDoc, meta: { ...versionDoc.meta, updatedAt: new Date().toISOString() } };
+    try {
+      // forceArchive: a restore replaces the current version wholesale — it must be
+      // archived even if the burst-coalescing window would normally skip it.
+      await saveDoc(restored, lastSynced.current ?? undefined, { forceArchive: true });
+    } catch (e) {
+      if (e instanceof ConflictError) { setPreview(null); setShowHistory(false); setConflict(true); return; }
+      throw e;
+    }
+    lastSynced.current = restored.meta.updatedAt;
+    resetDoc(restored);
+    upsertSummary(restored);
+    // The restore confirm was the deliberate act — don't re-lock an official flow behind
+    // a second confirm right after restoring it.
+    if (isOfficial(restored)) setUnlockedId(restored.id);
+    setPreview(null); setShowHistory(false);
   };
 
   const takeTheirs = async () => { const theirs = await getDoc(doc.id); if (theirs) switchTo(theirs); setConflict(false); };
@@ -156,6 +203,7 @@ export function EditorScreen() {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return; // let fields handle their own
+      if (previewing) return; // previewing an old version: editing (incl. undo/redo) is off
       if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
       if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
       if (e.key === 'Escape') setConnectMode(false);
@@ -163,7 +211,7 @@ export function EditorScreen() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [connectable, undo, redo]);
+  }, [connectable, undo, redo, previewing]);
 
   const doExport = async (kind: 'png' | 'pdf') => {
     setMoreOpen(false);
@@ -228,16 +276,16 @@ export function EditorScreen() {
         </div>
 
         <div className="topbar-center">
-          <input className="doc-title" value={doc.title} placeholder="Untitled diagram" readOnly={readOnly}
+          <input className="doc-title" value={shown.title} placeholder="Untitled diagram" readOnly={readOnly || previewing}
             aria-label="Diagram title" onChange={e => setDoc(renameDoc(doc, e.target.value))} />
-          <input className="doc-desc" value={doc.description ?? ''} placeholder="Add a description — what is this & when do you use it?" readOnly={readOnly}
+          <input className="doc-desc" value={shown.description ?? ''} placeholder="Add a description — what is this & when do you use it?" readOnly={readOnly || previewing}
             aria-label="Diagram description" onChange={e => setDoc(setDescription(doc, e.target.value))} />
         </div>
 
         <div className="topbar-right">
-          <button className="tbtn icon" onClick={undo} disabled={!canUndo} title="Undo (⌘/Ctrl+Z)">↶</button>
-          <button className="tbtn icon" onClick={redo} disabled={!canRedo} title="Redo (⌘/Ctrl+Shift+Z)">↷</button>
-          {connectable && !readOnly && (
+          <button className="tbtn icon" onClick={undo} disabled={!canUndo || previewing} title="Undo (⌘/Ctrl+Z)">↶</button>
+          <button className="tbtn icon" onClick={redo} disabled={!canRedo || previewing} title="Redo (⌘/Ctrl+Shift+Z)">↷</button>
+          {connectable && !readOnly && !previewing && (
             <button className={`tbtn ${connectMode ? 'active' : ''}`} onClick={() => setConnectMode(m => !m)}
               title="Connect blocks: click a start, then an end. Shortcut: C">
               {connectMode ? 'Connecting…' : 'Connect'}
@@ -271,6 +319,8 @@ export function EditorScreen() {
                 )}
                 <button onClick={() => doExport('png')}>Download PNG</button>
                 <button onClick={() => doExport('pdf')}>Download PDF</button>
+                <button onClick={() => { setMoreOpen(false); setShowHistory(true); }}
+                  title="Past versions of this diagram — preview or restore.">Version history</button>
                 <button onClick={() => { setMoreOpen(false); setFeedbackOpen(true); }}>💬 Send feedback</button>
                 {!readOnly && (
                   <button className="danger" onClick={() => { setMoreOpen(false); clearCanvas(); }}
@@ -285,11 +335,11 @@ export function EditorScreen() {
       <div className="stage">
         <div className="canvas" ref={canvasRef}>
           {isFishbone ? (
-            <FishboneCanvas doc={doc} selectedId={selectedId} onSelect={setSelectedId} focusId={focusId} />
+            <FishboneCanvas doc={shown} selectedId={selectedId} onSelect={setSelectedId} focusId={focusId} />
           ) : (
             <DiagramCanvas
-              doc={doc}
-              editable={!readOnly}
+              doc={shown}
+              editable={!readOnly && !previewing}
               connectable={connectable}
               connectMode={connectMode}
               focusId={focusId}
@@ -305,7 +355,15 @@ export function EditorScreen() {
             />
           )}
 
-          {history.length > 0 && (
+          {preview && (
+            <div className="preview-banner">
+              Viewing version from <b>{new Date(preview.archivedAt).toLocaleString()}</b>
+              <button onClick={() => restoreVersion(preview.doc, preview.archivedAt)}>Restore this version</button>
+              <button onClick={() => setPreview(null)}>Back to current</button>
+            </div>
+          )}
+
+          {history.length > 0 && !previewing && (
             <button className="flow-backbar" onClick={goBack}>
               <span className="flow-backbar-arrow" aria-hidden="true">←</span>
               Back to <b>{library.find(s => s.id === history[history.length - 1])?.title ?? 'previous flow'}</b>
@@ -349,7 +407,12 @@ export function EditorScreen() {
               <button className="panel-collapse" title="Hide" onClick={() => setRightOpen(false)}>▸</button>
             </div>
             <div className="panel-body">
-              {readOnly ? (
+              {previewing ? (
+                <div className="ro-note">
+                  <p><b>Previewing an old version.</b></p>
+                  <p>Editing is off while previewing. Restore this version, or go back to the current one.</p>
+                </div>
+              ) : readOnly ? (
                 <div className="ro-note">
                   <p><b>Starter flow — read-only.</b></p>
                   <p>This is a curated reference flow. Editing your own copy comes next; for now, follow the ↗ links and use Back to return.</p>
@@ -387,6 +450,15 @@ export function EditorScreen() {
           defaultPreset={doc.preset}
           onClose={() => setShowGenerate(false)}
           onGenerated={(generated) => { switchTo(generated); upsertSummary(generated); setShowGenerate(false); }}
+        />
+      )}
+
+      {showHistory && (
+        <HistoryModal
+          docId={doc.id}
+          onClose={() => setShowHistory(false)}
+          onPreview={previewVersion}
+          onRestore={restoreVersion}
         />
       )}
 

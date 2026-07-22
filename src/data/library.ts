@@ -73,10 +73,10 @@ export async function getDoc(id: string): Promise<KnowflowDoc | null> {
   } catch { setMode('offline'); return local.load(id); }
 }
 
-export async function saveDoc(doc: KnowflowDoc, base?: string | null): Promise<void> {
+export async function saveDoc(doc: KnowflowDoc, base?: string | null, opts?: { forceArchive?: boolean }): Promise<void> {
   if (usingLocal()) { local.save(doc); return; }
   try {
-    const res = await call('', { method: 'PUT', body: JSON.stringify({ doc, base }) });
+    const res = await call('', { method: 'PUT', body: JSON.stringify({ doc, base, forceArchive: opts?.forceArchive }) });
     if (res.status === 501) { setMode('unconfigured'); local.save(doc); return; }
     if (res.status === 409) throw new ConflictError();
     if (res.status === 403) throw new ProtectedError();
@@ -86,6 +86,29 @@ export async function saveDoc(doc: KnowflowDoc, base?: string | null): Promise<v
     if (e instanceof ConflictError || e instanceof ProtectedError) throw e;
     setMode('offline'); local.save(doc);
   }
+}
+
+/** One entry in a document's version history. */
+export interface VersionSummary {
+  id: number;
+  docId: string;
+  title: string | null;
+  archivedAt: string;
+}
+
+// Version history is server-side only (versions live in Postgres, not localStorage),
+// so there is no local fallback here — callers check getStorageMode() first and show
+// "history unavailable" outside cloud mode.
+export async function listVersions(docId: string): Promise<VersionSummary[]> {
+  const res = await fetch(`/api/versions?docId=${encodeURIComponent(docId)}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Could not load version history.');
+  return res.json();
+}
+
+export async function getVersion(id: number): Promise<KnowflowDoc | null> {
+  const res = await fetch(`/api/versions?id=${id}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Could not load that version.');
+  return (await res.json()) ?? null;
 }
 
 export async function removeDoc(id: string): Promise<void> {

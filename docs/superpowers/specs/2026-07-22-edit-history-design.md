@@ -1,7 +1,8 @@
 # Edit history — design
 
 **Date:** 2026-07-22
-**Status:** Design locked. Implementation not started (branch `feat/edit-history`).
+**Status:** Implemented on branch `feat/edit-history`. Pre-merge: user runs the CREATE TABLE
+below in Supabase, then a local visual pass.
 **Implements:** Step 2 of `2026-07-19-backend-persistence-and-ai-provenance-course.md`
 
 ## Problem

@@ -59,6 +59,28 @@ export default defineConfig(({ mode }) => {
             })
           })
 
+          server.middlewares.use('/api/versions', (req, res) => {
+            const url = new URL(req.url ?? '', 'http://localhost')
+            const id = url.searchParams.get('id')
+            const docId = url.searchParams.get('docId')
+            ;(async () => {
+              try {
+                if (req.method !== 'GET') { res.statusCode = 405; res.end('Method Not Allowed'); return }
+                const mod = await server.ssrLoadModule('/src/server/docs.ts')
+                const result = id ? await mod.getVersion(Number(id))
+                  : docId ? await mod.listVersions(docId)
+                  : null
+                if (result === null && !id) { res.statusCode = 400; res.end('{"error":"docId or id required"}'); return }
+                res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(result))
+              } catch (e) {
+                // StorageNotConfigured -> 501 (client shows "history unavailable"). Mirrors api/versions.ts.
+                res.statusCode = (e as Error)?.name === 'StorageNotConfigured' ? 501 : 500
+                res.setHeader('content-type', 'application/json')
+                res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }))
+              }
+            })()
+          })
+
           server.middlewares.use('/api/feedback', (req, res) => {
             if (req.method !== 'POST') { res.statusCode = 405; res.end('Method Not Allowed'); return }
             readBody(req).then(async (payload) => {

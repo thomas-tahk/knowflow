@@ -1,15 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { KnowflowDoc } from '../core/types';
 
-/** Rows the fake Supabase returns from `maybeSingle`, plus a log of what was written. */
+/** Rows the fake Supabase returns from `maybeSingle`, plus a log of what was written.
+ *  `from(table)` routes to a per-table builder: `documents` and `document_versions`. */
 const state: {
   existing: Record<string, unknown> | null;
   written: Record<string, unknown>[];
   deleted: string[];
   result: unknown;
-} = { existing: null, written: [], deleted: [], result: [] };
+  versions: {
+    /** Result of any select on document_versions (coalesce check, listVersions). */
+    queryResult: Record<string, unknown>[];
+    /** Row returned by maybeSingle on document_versions (getVersion). */
+    single: Record<string, unknown> | null;
+    /** Rows inserted into document_versions. */
+    inserted: Record<string, unknown>[];
+    /** When set, inserts into document_versions fail with this message. */
+    insertError: string | null;
+  };
+} = {
+  existing: null, written: [], deleted: [], result: [],
+  versions: { queryResult: [], single: null, inserted: [], insertError: null },
+};
 
-function builder() {
+function documentsBuilder() {
   const b: Record<string, unknown> = {};
   const chain = () => b;
   Object.assign(b, {
@@ -28,14 +42,41 @@ function builder() {
   return b;
 }
 
+function versionsBuilder() {
+  let op: 'select' | 'insert' = 'select';
+  const b: Record<string, unknown> = {};
+  const chain = () => b;
+  Object.assign(b, {
+    select: chain,
+    order: chain,
+    eq: chain,
+    limit: chain,
+    maybeSingle: async () => ({ data: state.versions.single, error: null }),
+    insert: (row: Record<string, unknown>) => {
+      op = 'insert';
+      if (!state.versions.insertError) state.versions.inserted.push(row);
+      return b;
+    },
+    then: (resolve: (v: unknown) => unknown) => {
+      const error = op === 'insert' && state.versions.insertError
+        ? { message: state.versions.insertError } : null;
+      const data = op === 'insert' ? null : state.versions.queryResult;
+      return Promise.resolve({ data, error }).then(resolve);
+    },
+  });
+  return b;
+}
+
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: () => ({ from: () => builder() }),
+  createClient: () => ({
+    from: (table: string) => (table === 'document_versions' ? versionsBuilder() : documentsBuilder()),
+  }),
 }));
 
 process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_SERVICE_KEY = 'test-key';
 
-const { saveDoc, deleteDoc, OfficialProtected } = await import('./docs');
+const { saveDoc, deleteDoc, listVersions, getVersion, OfficialProtected } = await import('./docs');
 
 function doc(overrides: Partial<KnowflowDoc> = {}): KnowflowDoc {
   return {
@@ -45,7 +86,21 @@ function doc(overrides: Partial<KnowflowDoc> = {}): KnowflowDoc {
   } as KnowflowDoc;
 }
 
-beforeEach(() => { state.existing = null; state.written = []; state.deleted = []; state.result = []; });
+/** An existing `documents` row whose content differs from what `doc()` is about to save. */
+function outgoingRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    status: 'draft', topic: null, sort_order: null, updated_at: 'old-token',
+    title: 'Old title', data: { id: 'd1', title: 'Old title' },
+    ...overrides,
+  };
+}
+
+const editedDoc = () => doc({ meta: { ...doc().meta, updatedAt: 'new-token' } });
+
+beforeEach(() => {
+  state.existing = null; state.written = []; state.deleted = []; state.result = [];
+  state.versions = { queryResult: [], single: null, inserted: [], insertError: null };
+});
 
 describe('saveDoc — status is server-owned', () => {
   it('refuses to promote a draft row just because the client says official', async () => {
@@ -81,6 +136,54 @@ describe('saveDoc — status is server-owned', () => {
   });
 });
 
+describe('saveDoc — archives the outgoing row into document_versions', () => {
+  it('copies the outgoing row (data, title, doc_updated_at) before overwriting', async () => {
+    state.existing = outgoingRow();
+    await saveDoc(editedDoc(), null);
+    expect(state.versions.inserted).toHaveLength(1);
+    expect(state.versions.inserted[0]).toMatchObject({
+      doc_id: 'd1', title: 'Old title',
+      data: { id: 'd1', title: 'Old title' }, doc_updated_at: 'old-token',
+    });
+    expect(state.written).toHaveLength(1); // the save itself still happened
+  });
+
+  it('archives nothing when content is unchanged (same updated_at token)', async () => {
+    state.existing = outgoingRow({ updated_at: 't' }); // matches doc().meta.updatedAt
+    await saveDoc(doc(), null);
+    expect(state.versions.inserted).toHaveLength(0);
+    expect(state.written).toHaveLength(1);
+  });
+
+  it('skips the archive when the newest version is less than 10 minutes old', async () => {
+    state.existing = outgoingRow();
+    state.versions.queryResult = [{ archived_at: new Date(Date.now() - 5 * 60_000).toISOString() }];
+    await saveDoc(editedDoc(), null);
+    expect(state.versions.inserted).toHaveLength(0);
+    expect(state.written).toHaveLength(1);
+  });
+
+  it('archives when the newest version is more than 10 minutes old', async () => {
+    state.existing = outgoingRow();
+    state.versions.queryResult = [{ archived_at: new Date(Date.now() - 11 * 60_000).toISOString() }];
+    await saveDoc(editedDoc(), null);
+    expect(state.versions.inserted).toHaveLength(1);
+  });
+
+  it('archives nothing for a brand-new doc', async () => {
+    state.existing = null;
+    await saveDoc(doc(), null);
+    expect(state.versions.inserted).toHaveLength(0);
+  });
+
+  it('rejects the save when the archive insert fails; nothing written to documents', async () => {
+    state.existing = outgoingRow();
+    state.versions.insertError = 'insert failed';
+    await expect(saveDoc(editedDoc(), null)).rejects.toThrow('insert failed');
+    expect(state.written).toHaveLength(0);
+  });
+});
+
 describe('deleteDoc — official rows are protected', () => {
   it('refuses to delete an official row', async () => {
     state.existing = { status: 'official', topic: 'g', sort_order: 0, updated_at: 't' };
@@ -98,5 +201,53 @@ describe('deleteDoc — official rows are protected', () => {
     state.existing = null;
     await deleteDoc('gone');
     expect(state.deleted).toHaveLength(1);
+  });
+});
+
+describe('deleteDoc — archives the draft before deleting', () => {
+  it('copies the draft row into document_versions, then deletes', async () => {
+    state.existing = outgoingRow();
+    await deleteDoc('d1');
+    expect(state.versions.inserted).toHaveLength(1);
+    expect(state.versions.inserted[0]).toMatchObject({
+      doc_id: 'd1', title: 'Old title', doc_updated_at: 'old-token',
+    });
+    expect(state.deleted).toHaveLength(1);
+  });
+
+  it('archives nothing when the official delete is refused', async () => {
+    state.existing = outgoingRow({ status: 'official' });
+    await expect(deleteDoc('d1')).rejects.toBeInstanceOf(OfficialProtected);
+    expect(state.versions.inserted).toHaveLength(0);
+  });
+
+  it('archives nothing for a row that does not exist', async () => {
+    state.existing = null;
+    await deleteDoc('gone');
+    expect(state.versions.inserted).toHaveLength(0);
+  });
+});
+
+describe('version history reads', () => {
+  it('listVersions maps rows to summaries, newest first as returned', async () => {
+    state.versions.queryResult = [
+      { id: 2, doc_id: 'd1', title: 'Newer', archived_at: '2026-07-22T10:00:00Z' },
+      { id: 1, doc_id: 'd1', title: 'Older', archived_at: '2026-07-22T09:00:00Z' },
+    ];
+    const list = await listVersions('d1');
+    expect(list).toEqual([
+      { id: 2, docId: 'd1', title: 'Newer', archivedAt: '2026-07-22T10:00:00Z' },
+      { id: 1, docId: 'd1', title: 'Older', archivedAt: '2026-07-22T09:00:00Z' },
+    ]);
+  });
+
+  it('getVersion returns the stored doc blob', async () => {
+    state.versions.single = { data: { id: 'd1', title: 'Old title' } };
+    expect(await getVersion(1)).toEqual({ id: 'd1', title: 'Old title' });
+  });
+
+  it('getVersion returns null for an unknown version id', async () => {
+    state.versions.single = null;
+    expect(await getVersion(999)).toBeNull();
   });
 });

@@ -88,6 +88,29 @@ export async function saveDoc(doc: KnowflowDoc, base?: string | null): Promise<v
   }
 }
 
+/** One entry in a document's version history. */
+export interface VersionSummary {
+  id: number;
+  docId: string;
+  title: string | null;
+  archivedAt: string;
+}
+
+// Version history is server-side only (versions live in Postgres, not localStorage),
+// so there is no local fallback here — callers check getStorageMode() first and show
+// "history unavailable" outside cloud mode.
+export async function listVersions(docId: string): Promise<VersionSummary[]> {
+  const res = await fetch(`/api/versions?docId=${encodeURIComponent(docId)}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Could not load version history.');
+  return res.json();
+}
+
+export async function getVersion(id: number): Promise<KnowflowDoc | null> {
+  const res = await fetch(`/api/versions?id=${id}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Could not load that version.');
+  return (await res.json()) ?? null;
+}
+
 export async function removeDoc(id: string): Promise<void> {
   if (usingLocal()) { local.remove(id); return; }
   try {

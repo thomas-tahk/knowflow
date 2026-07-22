@@ -51,6 +51,20 @@
 .react-flow__controls-button:hover { background: #E4EFEC; }
 .react-flow__controls-button svg { fill: #0F766E; }
 
+/* "You are looking at an old version" banner — amber, so it can't be mistaken for live state. */
+.preview-banner {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 7;
+  display: inline-flex; align-items: center; gap: 10px; white-space: nowrap;
+  font-size: 13px; font-weight: 600; color: #7A5B1F; background: #FBF3DF; border: 1px solid #E3C77E;
+  border-radius: 999px; padding: 8px 14px; box-shadow: 0 10px 24px -12px rgba(41,40,31,.45);
+}
+.preview-banner b { font-weight: 700; }
+.preview-banner button {
+  font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  border: 1px solid #E3C77E; background: #fff; color: #7A5B1F; border-radius: 999px; padding: 4px 10px;
+}
+.preview-banner button:hover { background: #F6E9C9; }
+
 /* Prominent "you came from another flow" breadcrumb — the return path for followed links. */
 .flow-backbar {
   position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 6;

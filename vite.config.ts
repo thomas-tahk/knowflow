@@ -1,10 +1,11 @@
 import { defineConfig, loadEnv, type ViteDevServer } from 'vite'
 import react from '@vitejs/plugin-react'
+import type { IncomingMessage } from 'node:http'
 
-function readBody(req: any): Promise<any> {
+function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
     let body = ''
-    req.on('data', (c: any) => { body += c })
+    req.on('data', (c: Buffer) => { body += c.toString() })
     req.on('end', () => { try { resolve(JSON.parse(body || '{}')) } catch { resolve({}) } })
   })
 }

@@ -68,7 +68,7 @@ describe('operations', () => {
     d = addBlock(d, 'B', 'outcome', clock).doc;
     d = addBlock(d, 'C', 'outcome', clock).doc;
     const [a, b, c] = d.blocks.map(x => x.id);
-    let res = addConnection(d, a, b, 'yes', clock);
+    const res = addConnection(d, a, b, 'yes', clock);
     d = res.doc;
     const connId = res.connectionId;
     expect(d.connections[0]).toMatchObject({ from: a, to: b, label: 'yes' });

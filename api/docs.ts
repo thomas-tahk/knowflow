@@ -3,9 +3,10 @@
 // and Vercel runs this as a native ESM function where extensionless imports throw
 // ERR_MODULE_NOT_FOUND (surfaces as FUNCTION_INVOCATION_FAILED). Dev/build don't hit
 // this file (dev uses Vite ssrLoadModule on src/server/docs.ts directly).
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { listDocs, getDoc, saveDoc, deleteDoc, StorageNotConfigured, ConflictError, OfficialProtected } from '../src/server/docs.js';
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (process.env.APP_PASSWORD && req.headers['x-app-password'] !== process.env.APP_PASSWORD) {
     res.status(401).json({ error: 'Unauthorized' }); return;
   }

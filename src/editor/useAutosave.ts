@@ -19,7 +19,7 @@ export function useAutosave(doc: KnowflowDoc, save: (doc: KnowflowDoc) => void |
   saveRef.current = save;
 
   const saverRef = useRef<((doc: KnowflowDoc) => void) | null>(null);
-  if (!saverRef.current) {
+  if (saverRef.current == null) {
     saverRef.current = makeDebouncedSaver(async (d) => {
       try { await saveRef.current(d); setStatus('saved'); } catch { setStatus('error'); }
     }, delay);

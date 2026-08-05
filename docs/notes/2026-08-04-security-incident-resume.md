@@ -25,31 +25,34 @@ Typecheck clean · 128/128 tests · all 13 starter flows validate against their 
 
 Untouched: `secIntake`, `secPhishing`, `secOwnershipMap`, and all non-security flows.
 
-## ← START HERE ON RESUME: node diction
+## Node diction — DONE 2026-08-05 (commit `182164c`), needs on-screen review
 
-User reviewed the rendered flows and the verdict is **the node text is too verbose**. The
-content and paths are broadly right; the wording is not. Next session is a pass over
-**each node individually**, tightening text toward labels rather than sentences.
+Verdict was **the node text is too verbose**; content and paths were broadly right. A
+node-by-node pass tightened every box toward a label. No path or structure changed.
+Typecheck clean · 128/128 tests.
 
-Worst offenders (mine, written this pass):
-- `secMalware` triggers — each carries a full P1 conditional clause inside the box
-- `secDarkwebPassword` Google branch — `dw-google-react`, `dw-google-direct`, `dw-google-task`
-  are all full sentences
-- `secCompromisedAccount` `ca-notify` — parenthetical inside a conditional
-- `secRemediation` — the numbered steps carry their entire procedure inline
+Rule applied: box text is a label, not a sentence. Detail that no longer fits moved into
+the flow `description` — nothing was dropped. Driving constraint: these diagrams become
+**KB reference documents and screenshots**, so boxes must be scannable at a glance.
 
-Constraint that should drive this: these diagrams become **KB reference documents and
-screenshots** for the department. Box text has to be scannable at a glance. Detail that
-doesn't fit belongs in the flow `description`, not in a node.
+| Flow | Diction change |
+|---|---|
+| `secMalware` | Triggers → `Malware or virus reported (P1 if VIP or systemic)`, `Browser takeover reported (…)`, `Fake help desk pop-up — always P1`. The fake-1-800 explanation and the KB title moved to the description; the short P1 qualifier stayed **in** the boxes on purpose — it's the decision the reader is scanning for |
+| `secDarkwebPassword` | Google branch is four short labels now; "customer may not even be aware of the notification" → description |
+| `secCompromisedAccount` | Origination boxes → `CASA flag — …` / `InfoSec ticket — …` / `Customer called in — …`; `ca-notify` → `Notify the user if a phone number is listed` (AD/ServiceNow lookup → description) |
+| `secRemediation` | Numbered steps carry the action + owning team only; the sign-out mechanics, inbox checklist, and TCS re-image detail → description. `rm-3-so` reads `Server Ops resets the Azure tokens` |
+| `secLetsTalk` | `lt-why` → `Verify the real user by ticket or call`; the bad-actor reasoning → description |
+| `secPhishing` | **Not in the original scope** — same sentence-length problem, so it got the pass too (`Customer reports phishing`, `Provide the registration key (KB0017446)`, …). Bumped to version 2 |
 
-Go node by node; do not restructure paths while doing diction.
+Untouched: `secIntake` and `secOwnershipMap` were already label-length.
 
-## Next steps
+## ← START HERE ON RESUME
 
-1. **User has not yet visually reviewed any of this.** They review in the running app, not
+1. **User has still not visually reviewed any of this.** They review in the running app, not
    from prose — `npm run dev` in the worktree, no `.env.local` needed (falls back to bundled
    starters, so no database involved). Diagrams panel → "Security Incident Intake" group
-   (collapsed by default).
+   (collapsed by default). Shorter labels also mean **smaller boxes and a different layout**
+   than the last render — check the whole group re-lays out sensibly, not just the wording.
 2. Interpretations to confirm on screen:
    - Darkweb Google branch ordering: reactions → direct-to-change-password → InfoSec/CASA task → Reset
    - Malware: "Create a P1" sits on the main line for *all* paths, per the amended step wording,

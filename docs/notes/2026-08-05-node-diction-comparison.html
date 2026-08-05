@@ -136,11 +136,11 @@
 </p>
 
 <!-- ──────────────────── Compromised Account ──────────────────── -->
-<h2>Compromised Account or Device <span class="file">secCompromisedAccount.ts</span></h2>
+<h2>Compromised Account or Device <span class="file">secCompromisedAccount.ts</span> <span class="rev">revised on your review</span></h2>
 <div class="desc-block">
   <span class="lbl">Flow description</span>
   <p class="desc-before">However it reaches us, Service Desk's job is the password reset. A customer calling in goes straight to the reset; CASA- and InfoSec-flagged cases notify the user first, where a phone number exists. Deeper cleanup is owned by CASA / InfoSec / Server Ops.</p>
-  <p>However it reaches us, Service Desk's job is the password reset. A customer calling in goes straight to the reset; CASA- and InfoSec-flagged cases notify the user first, where a phone number exists — <strong>check the number listed in AD or ServiceNow. CASA flags Google account compromises (manually or automatically); InfoSec raises a ticket when Sophos MDR catches a compromised AD account or device.</strong> Deeper cleanup is owned by CASA / InfoSec / Server Ops.</p>
+  <p>Service Desk's job here is the password reset; a customer calling in goes straight to it.</p>
 </div>
 <div class="scroll">
 <table>
@@ -164,7 +164,7 @@
     <tr>
       <td class="id">ca-notify</td>
       <td class="before">Notify the user if a phone number is available (check the phone listed in AD or ServiceNow)</td>
-      <td class="after">Notify the user if a phone number is listed</td>
+      <td class="after">Notify the user if a phone number is listed in AD or ServiceNow</td>
     </tr>
     <tr class="same"><td class="id">ca-reset</td><td class="before">Reset Password</td><td class="after">Reset Password</td></tr>
     <tr class="same"><td class="id">ca-cleanup</td><td class="before">Security Tasks</td><td class="after">Security Tasks</td></tr>
@@ -172,6 +172,13 @@
   </tbody>
 </table>
 </div>
+<p class="note">
+  <strong>Dropped, not relocated:</strong> that CASA flags Google compromises “manually or
+  automatically”, and that the InfoSec/Sophos MDR alert concerns an “AD account or device”. There is
+  no longer anywhere on the diagram for that detail — flagging it so the loss is a decision, not an
+  accident. The ownership line you cut is not really lost: the <strong>Team Ownership Map</strong>
+  flow already says who owns what.
+</p>
 
 <!-- ───────────────────────── Darkweb ───────────────────────── -->
 <h2>Darkweb Alert <span class="file">secDarkwebPassword.ts</span></h2>

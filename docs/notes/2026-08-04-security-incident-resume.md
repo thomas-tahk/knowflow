@@ -25,6 +25,25 @@ Typecheck clean · 128/128 tests · all 13 starter flows validate against their 
 
 Untouched: `secIntake`, `secPhishing`, `secOwnershipMap`, and all non-security flows.
 
+## ← START HERE ON RESUME: node diction
+
+User reviewed the rendered flows and the verdict is **the node text is too verbose**. The
+content and paths are broadly right; the wording is not. Next session is a pass over
+**each node individually**, tightening text toward labels rather than sentences.
+
+Worst offenders (mine, written this pass):
+- `secMalware` triggers — each carries a full P1 conditional clause inside the box
+- `secDarkwebPassword` Google branch — `dw-google-react`, `dw-google-direct`, `dw-google-task`
+  are all full sentences
+- `secCompromisedAccount` `ca-notify` — parenthetical inside a conditional
+- `secRemediation` — the numbered steps carry their entire procedure inline
+
+Constraint that should drive this: these diagrams become **KB reference documents and
+screenshots** for the department. Box text has to be scannable at a glance. Detail that
+doesn't fit belongs in the flow `description`, not in a node.
+
+Go node by node; do not restructure paths while doing diction.
+
 ## Next steps
 
 1. **User has not yet visually reviewed any of this.** They review in the running app, not

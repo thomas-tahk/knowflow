@@ -6,7 +6,7 @@ const UPDATED = '2026-08-05T00:00:00.000Z';
 export const secCompromisedAccount: KnowflowDoc = {
   id: 'starter:sec-compromised-account',
   title: 'Compromised Account or Device',
-  description: "Service Desk's job here is the password reset; a customer calling in goes straight to it.",
+  description: 'Service Desk resets password. InfoSec or CASA takes ownership and followup with customer.',
   preset: 'flowchart',
   blocks: [
     { id: 'ca-casa', type: 'step', text: 'CASA flag — Google account compromise' },

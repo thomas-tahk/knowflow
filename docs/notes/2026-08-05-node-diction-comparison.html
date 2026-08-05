@@ -140,7 +140,7 @@
 <div class="desc-block">
   <span class="lbl">Flow description</span>
   <p class="desc-before">However it reaches us, Service Desk's job is the password reset. A customer calling in goes straight to the reset; CASA- and InfoSec-flagged cases notify the user first, where a phone number exists. Deeper cleanup is owned by CASA / InfoSec / Server Ops.</p>
-  <p>Service Desk's job here is the password reset; a customer calling in goes straight to it.</p>
+  <p>Service Desk resets password. InfoSec or CASA takes ownership and followup with customer.</p>
 </div>
 <div class="scroll">
 <table>
@@ -181,11 +181,11 @@
 </p>
 
 <!-- ───────────────────────── Darkweb ───────────────────────── -->
-<h2>Darkweb Alert <span class="file">secDarkwebPassword.ts</span></h2>
+<h2>Darkweb Alert <span class="file">secDarkwebPassword.ts</span> <span class="rev">rebuilt on your review</span></h2>
 <div class="desc-block">
   <span class="lbl">Flow description</span>
   <p class="desc-before">Two separate originations: an InfoSec alert about a password, and a Google notification sent straight to the end user. Service Desk is minimally involved in both.</p>
-  <p>Two separate originations: a state/federal or darkweb alert that reaches InfoSec, and a Google notification sent straight to the end user telling them to change their password. <strong>On the Google branch, users may disregard it, report it as phishing, or call in — direct them to change their password even if they're not aware of the notification.</strong> Service Desk is minimally involved in both.</p>
+  <p>Two originations — InfoSec and CASA — that converge on the same password reset.</p>
 </div>
 <div class="scroll">
 <table>
@@ -194,7 +194,12 @@
     <tr>
       <td class="id">dw-trigger</td>
       <td class="before">InfoSec-originated: a state/federal or darkweb alert about a user's password</td>
-      <td class="after">InfoSec alert — darkweb or state/federal</td>
+      <td class="after">InfoSec receives a state or federal notice: an APS user's password found on the dark web</td>
+    </tr>
+    <tr>
+      <td class="id">dw-google</td>
+      <td class="before">Google-originated: Google notifies the end user directly to change their password</td>
+      <td class="after">CASA: Google notified the end user to change their password</td>
     </tr>
     <tr>
       <td class="id">dw-confirm</td>
@@ -202,30 +207,39 @@
       <td class="after">Confirm to the customer that it is legitimate</td>
     </tr>
     <tr>
-      <td class="id">dw-google</td>
-      <td class="before">Google-originated: Google notifies the end user directly to change their password</td>
-      <td class="after">Google notifies the user directly</td>
-    </tr>
-    <tr>
       <td class="id">dw-google-react</td>
       <td class="before">The user may disregard it, may report it as phishing, or may call the Service Desk</td>
-      <td class="after">User disregards, reports as phishing, or calls in</td>
+      <td class="after"><em>node removed</em></td>
     </tr>
     <tr>
       <td class="id">dw-google-direct</td>
       <td class="before">Go ahead and direct the customer to change their password — they may not even be aware of the Google notification</td>
-      <td class="after">Direct the customer to change their password</td>
+      <td class="after"><em>node removed</em></td>
     </tr>
     <tr>
       <td class="id">dw-google-task</td>
       <td class="before">InfoSec or CASA creates a task for the Service Desk to reset the password</td>
-      <td class="after">InfoSec or CASA creates a Service Desk reset task</td>
+      <td class="after"><em>node removed</em></td>
     </tr>
     <tr class="same"><td class="id">dw-reset</td><td class="before">Reset Password</td><td class="after">Reset Password</td></tr>
     <tr class="same"><td class="id">dw-done</td><td class="before">IT's involvement is complete</td><td class="after">IT's involvement is complete</td></tr>
   </tbody>
 </table>
 </div>
+<p class="note">
+  <strong>Shape now:</strong> InfoSec and CASA start side by side, both arrow into
+  <code>Confirm it is legitimate</code> → <code>Reset Password</code> → <code>IT's involvement is
+  complete</code>. Five nodes, same fan-in shape as Compromised Account. The vertical offset was a
+  symptom of the long branch, not a layout setting — with the branches symmetric, auto-layout should
+  put the two originations on one row.
+</p>
+<p class="note">
+  <strong>Heads up on what the three deleted nodes were:</strong> they came from the supervisor's raw
+  notes (“users may disregard, may report as phishing, some call service desk → direct customer to
+  change password → InfoSec or CASA will create task to reset password”). Cutting them is a content
+  decision, not just a diction one — worth being sure that's what you want before this goes to the
+  department.
+</p>
 
 <!-- ───────────────────────── Malware ───────────────────────── -->
 <h2>Malware / Virus / Takeover <span class="file">secMalware.ts</span></h2>

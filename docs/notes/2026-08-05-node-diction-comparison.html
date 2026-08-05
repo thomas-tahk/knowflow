@@ -40,6 +40,12 @@
     display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap;
   }
   h2 .file { font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); font-weight: 400; }
+  h2 .rev {
+    font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--after); background: var(--after-bg); border-radius: 999px; padding: .2rem .55rem;
+  }
+  td.after em { color: var(--muted); font-style: italic; }
+  .note code { background: var(--card); padding: .1em .35em; border-radius: 4px; font-size: .92em; }
   .desc-block {
     background: var(--card); border: 1px solid var(--line); border-radius: 8px;
     padding: .8rem .9rem; margin: .9rem 0 1rem;
@@ -92,11 +98,11 @@
 </p>
 
 <!-- ───────────────────────── Let's Talk ───────────────────────── -->
-<h2>Let's Talk <span class="file">secLetsTalk.ts</span></h2>
+<h2>Let's Talk <span class="file">secLetsTalk.ts</span> <span class="rev">revised on your review</span></h2>
 <div class="desc-block">
   <span class="lbl">Flow description</span>
   <p class="desc-before">A security concern that arrives through a 'Let's Talk' ticket. Any team can receive these; route to Service Desk.</p>
-  <p>A security concern that arrives through a 'Let's Talk' ticket. Any team can receive these; route to Service Desk. <strong>We don't act on the 'Let's Talk' alone — the reporter could be a bad actor, and a ticket or call is what verifies we're dealing with the real user.</strong></p>
+  <p>A security concern that arrives through a 'Let's Talk' ticket. Route it to the Service Desk.</p>
 </div>
 <div class="scroll">
 <table>
@@ -105,21 +111,29 @@
     <tr>
       <td class="id">lt-trigger</td>
       <td class="before">Any 'Let's Talk' ticket that involves a security incident or concern</td>
-      <td class="after">'Let's Talk' ticket with a security concern</td>
+      <td class="after">'Let's Talk' ticket about a security incident or concern</td>
     </tr>
     <tr>
       <td class="id">lt-why</td>
       <td class="before">Why a ticket/call: the 'Let's Talk' reporter could be a bad actor — a ticket or call lets us verify it's really the user</td>
-      <td class="after">Verify the real user by ticket or call</td>
+      <td class="after"><em>node removed</em> — the reasoning now rides the arrow as an edge label: “A ticket or call verifies the real user — the reporter could be a bad actor”</td>
     </tr>
-    <tr class="same">
+    <tr>
       <td class="id">lt-direct</td>
       <td class="before">Direct the user to call the Service Desk</td>
-      <td class="after">Direct the user to call the Service Desk</td>
+      <td class="after">Direct the customer to call the Service Desk</td>
     </tr>
   </tbody>
 </table>
 </div>
+<p class="note">
+  <strong>Two steps now, per your call.</strong> Dropped “any team can receive these” and the
+  “we don't act on the Let's Talk alone” opener. The reason is on the arrow rather than in a box —
+  but edge labels are <code>white-space: nowrap</code> (<code>GraphEdge.css:7</code>), so that label
+  renders as one wide pill, roughly 460px. In a two-node diagram there's nothing beside it to collide
+  with, so it should be fine — but this is the thing to eyeball. Fallback if it reads as a banner:
+  shorten to “A ticket or call verifies the real user”.
+</p>
 
 <!-- ──────────────────── Compromised Account ──────────────────── -->
 <h2>Compromised Account or Device <span class="file">secCompromisedAccount.ts</span></h2>

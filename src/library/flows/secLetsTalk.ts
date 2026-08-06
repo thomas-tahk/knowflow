@@ -13,7 +13,7 @@ export const secLetsTalk: KnowflowDoc = {
     { id: 'lt-direct', type: 'outcome', text: 'Direct the customer to call the Service Desk' },
   ],
   connections: [
-    { id: 'ltc0', from: 'lt-trigger', to: 'lt-direct', label: 'A ticket or call verifies the real user — the reporter could be a bad actor' },
+    { id: 'ltc0', from: 'lt-trigger', to: 'lt-direct', label: 'Confirms the real user, not a bad actor' },
   ],
   meta: { author: 'knowflow', createdAt: AT, updatedAt: UPDATED, status: 'official', version: 2 },
 };

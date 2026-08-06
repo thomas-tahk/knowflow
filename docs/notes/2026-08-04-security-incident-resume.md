@@ -31,9 +31,43 @@ Verdict was **the node text is too verbose**; content and paths were broadly rig
 node-by-node pass tightened every box toward a label. No path or structure changed.
 Typecheck clean · 128/128 tests.
 
-Rule applied: box text is a label, not a sentence. Detail that no longer fits moved into
-the flow `description` — nothing was dropped. Driving constraint: these diagrams become
-**KB reference documents and screenshots**, so boxes must be scannable at a glance.
+**Two rules, and the second one supersedes how the first pass was executed:**
+
+1. Box text is a label, not a sentence. These diagrams become **KB reference documents and
+   screenshots**, so boxes must be scannable at a glance.
+2. A `description` is **one short line (~90 chars) saying what the flow is** — *not* an
+   overflow bucket. The first pass assumed it was one; it isn't. See "Description is
+   single-line" below. Detail therefore either fits in a node, rides an arrow as a
+   connection `label`, or is cut on purpose.
+
+### Description is single-line — verified, not assumed
+
+- Editor: a single-line `<input>` in the topbar, 12px, fixed 520px (`EditorScreen.tsx:281`,
+  `EditorScreen.css:24`). Past ~90 chars it is simply not visible.
+- **PNG/PDF export** (the KB screenshot): one `ctx.fillText()`, centered, **no wrapping and
+  no clipping** (`exporters.ts:120-124`). A long description runs off both edges of the
+  image and is cut by the canvas bounds.
+- Open option, user's call, not started: word-wrap the header in `composeWithHeader` and
+  make the editor field wrap. ~30 lines, outside this content branch's scope.
+
+### Review round 2026-08-05/06 — user reviewed on screen, flows revised
+
+Went past diction into structure. Every flow below is at ≤95-char description.
+
+| Flow | Revision |
+|---|---|
+| `secLetsTalk` | Down to **2 nodes** (`lt-why` deleted). The reasoning rides the arrow as a connection label. Note `.ge-label` is `white-space: nowrap` (`GraphEdge.css:7`) — long labels render as one wide pill |
+| `secCompromisedAccount` | Description is the user's verbatim text. `ca-notify` regained "in AD or ServiceNow". **Dropped deliberately:** CASA "manually or automatically", MDR "AD account or device" |
+| `secDarkwebPassword` | **Rebuilt.** InfoSec and CASA are two originations that *converge* on confirm → reset → done. The three Google-side steps deleted as clutter |
+| `secMalware` | **Rebuilt.** P1 conditional is now a decision diamond (`mw-isp1`) instead of text repeated in two triggers; Yes → create P1, No → straight to Security Tasks |
+| `secRemediation` | Description trimmed to one line; `rm-1b` regained "user action or Google Admin" so the mechanics survive in the node |
+| `secPhishing` | Description trimmed. The "further CASA-side sub-types to be specified with supervisor" line was removed from it — **that to-do now lives here** (see Open questions) |
+
+**Principle the user set:** the raw notes are *their own* notes, not the supervisor's. Content
+in them is not gospel — cutting clutter to make the diagram readable is the job, not a
+deviation from source.
+
+### The original 2026-08-05 diction pass (superseded in places by the above)
 
 | Flow | Diction change |
 |---|---|
@@ -53,10 +87,12 @@ Untouched: `secIntake` and `secOwnershipMap` were already label-length.
    starters, so no database involved). Diagrams panel → "Security Incident Intake" group
    (collapsed by default). Shorter labels also mean **smaller boxes and a different layout**
    than the last render — check the whole group re-lays out sensibly, not just the wording.
-2. Interpretations to confirm on screen:
-   - Darkweb Google branch ordering: reactions → direct-to-change-password → InfoSec/CASA task → Reset
-   - Malware: "Create a P1" sits on the main line for *all* paths, per the amended step wording,
-     even though only fake-helpdesk is unconditionally P1
+2. Things to confirm on screen after the 2026-08-06 revisions:
+   - `secLetsTalk`: does the long nowrap edge label read as an annotation or as a banner?
+     Fallback if it's too much: "A ticket or call verifies the real user"
+   - `secDarkwebPassword`: do the two originations now sit on one row (the vertical offset was
+     a symptom of the four-node branch, not a layout setting)?
+   - `secMalware`: does the new `P1?` diamond + Yes/No rejoin read cleanly?
    - Security Tasks as a flowchart loses the clean numbered-list look — check it still reads well
 3. **Parked feature:** team color-coding. User wants *background color columns* (swimlanes) —
    4 teams, 3 primary. `Block` has no color field; flowchart preset allows only
@@ -64,6 +100,8 @@ Untouched: `secIntake` and `secOwnershipMap` were already label-length.
 
 ## Open questions
 
+- **Phishing sub-types** — further CASA-side sub-types (bad-guy phish, training-hook abuse,
+  spam) still to be specified with the supervisor. Moved here out of the flow description.
 - Whether "the different flow paths are not mutually exclusive" (raw notes) needs structural
   work anywhere — not yet addressed.
 - The user raised doing edits **in the app** instead of in the repo, to dogfood the editor and

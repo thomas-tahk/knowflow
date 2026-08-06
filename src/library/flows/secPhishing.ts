@@ -6,7 +6,7 @@ const UPDATED = '2026-08-05T00:00:00.000Z';
 export const secPhishing: KnowflowDoc = {
   id: 'starter:sec-phishing',
   title: 'Phishing',
-  description: 'Minimal per current process — direct users to the phish hook, whether it is a suspicious email or a whole group being phished. Registration-key info is in KB0017446. Further CASA-side sub-types (bad-guy phish, training-hook abuse, spam) to be specified with supervisor.',
+  description: 'Direct the user to the phish hook. CASA triages from there.',
   preset: 'flowchart',
   blocks: [
     { id: 'ph-trigger', type: 'step', text: 'Customer reports phishing' },

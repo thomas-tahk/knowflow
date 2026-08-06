@@ -6,11 +6,11 @@ const UPDATED = '2026-08-05T00:00:00.000Z';
 export const secRemediation: KnowflowDoc = {
   id: 'starter:sec-remediation',
   title: 'Security Tasks',
-  description: "The standard security tasks for an incident. These run in this order. Step 1b is either a user action or Google Admin 'reset sign-in cookies' — InfoSec relays the instruction to CASA. Step 2 covers 'Send As'/alias settings, bad filters, and forwarding rules. Step 3 is requested by either CASA or InfoSec, and completed by Server Ops. Step 4 is a Sophos full system scan, with a re-image requested through TCS if the scan isn't enough.",
+  description: 'The standard security tasks for an incident, in the order they run.',
   preset: 'flowchart',
   blocks: [
     { id: 'rm-1a', type: 'step', text: '1a · Reset password, incl. disabled accounts (Service Desk)', linkTo: 'starter:reset-password' },
-    { id: 'rm-1b', type: 'step', text: '1b · Sign out of all unknown devices (CASA)' },
+    { id: 'rm-1b', type: 'step', text: '1b · Sign out of all unknown devices — user action or Google Admin (CASA)' },
     { id: 'rm-2', type: 'step', text: '2 · Clean the inbox — filters, forwarding, aliases (CASA)' },
     { id: 'rm-3-casa', type: 'step', text: '3 · CASA creates the task' },
     { id: 'rm-3-infosec', type: 'step', text: '3 · InfoSec creates the task' },

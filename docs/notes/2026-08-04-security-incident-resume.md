@@ -80,6 +80,61 @@ deviation from source.
 
 Untouched: `secIntake` and `secOwnershipMap` were already label-length.
 
+### Review round 2 — 2026-08-06 (commit `501b444`)
+
+All from on-screen review. Typecheck clean · 128/128.
+
+| Flow | Change |
+|---|---|
+| `secLetsTalk` | Arrow label reworded → `Confirms the real user, not a bad actor` |
+| `secDarkwebPassword` | Title → **Dark Web Alert**. CASA removed from the Google node (CASA isn't necessarily involved, at least not manually). New `dw-task` node: *InfoSec or CASA creates a task for Service Desk to reset the password* — both originations pass through it. The user-reaction variance is now an **arrow label**: `User calls in — others ignore it or report phishing`, on the edge into *Confirm it's legitimate* |
+| `secMalware` | Diamond reads `Decide if P1`; the three criteria are now their own boxes (`Fake help desk — always a P1`, `A VIP is involved`, `Systemic, not an isolated case`) that fan out and close back on *Create a P1*. A `None apply` edge goes straight to Security Tasks |
+| `secPhishing` | Diamond → `Phish hook asks for registration key`. The `Works` arrow now originates from *Direct the user to the KnowBe4 phish hook button*, not from the diamond |
+| `secRemediation` | **Numbering removed** (made sense in the source doc, not here). `incl.` → `including`. The CASA/InfoSec 3-way split collapsed to one node: *InfoSec or CASA creates a task for Server Ops to reset the Azure tokens* |
+
+Also: **`.flow-backbar` moved from dead-center top to top-left** (`EditorScreen.css:70`). It was
+`left: 50%; transform: translateX(-50%)`, i.e. sitting exactly on top of the first node of every
+top-down flow. Only CSS changed; `EditorScreen.tsx` untouched (see PR note below).
+
+## Open — decisions for the user
+
+1. **Reset Password ↔ Security Tasks is redundant.** The incident flows each have a standalone
+   *Reset Password* door, then link to *Security Tasks*, whose own first step is *Reset the
+   password*. Two ways out, and it's a content call, not a code one:
+   - **(a)** Drop the standalone reset from the incident flows; Security Tasks owns it. One place,
+     but hides Service Desk's most immediate action behind a door.
+   - **(b)** Drop the reset step from Security Tasks and let it start at sign-out. Keeps the
+     incident flows honest about the first action; makes Security Tasks incomplete on its own.
+   No recommendation without knowing whether Security Tasks gets read standalone.
+2. **Auth model.** Today: one shared `APP_PASSWORD`, everyone who has it can edit. The user wants
+   *read-only for everyone except themselves*, or fully open — but explicitly does **not** want to
+   build real auth while the app's future is uncertain. Cheapest option that fits: keep the shared
+   password as an **edit** unlock and make unauthenticated access read-only, which is close to how
+   the official-flow lock already behaves. Not designed yet.
+3. **Migration / portability.** No specific plan, but keep future re-platforming in mind — avoid
+   deepening the Supabase coupling without cause.
+
+## PR pile-up — checked, the fear is unfounded
+
+Only **two** PRs are open, both `MERGEABLE`, both tooling-scoped:
+
+| PR | Branch | Touches |
+|---|---|---|
+| #12 | `chore/setup-mp-skills` | `CLAUDE.md`, `docs/agents/*` |
+| #13 | `chore/verify-spine` | CI + husky, `api/*`, `eslint`, `package.json`, `EditorScreen.tsx`, `DiagramsPanel.tsx`, `useAutosave.ts` |
+
+`git merge-tree` against `fix/sec-incident-content` reports **no conflict for either**. This branch
+touches `src/library/flows/*`, `EditorScreen.css`, and `docs/notes/*` — no file overlap with either
+PR (#13 has `EditorScreen.tsx`; this branch only has the `.css`). PR #11 (edit history) is already
+merged into `main`. Nothing is about to break to smithereens.
+
+## User's stated priorities (2026-08-06)
+
+1. Content fixes for the security-incident flows ← *nearly done, pending final on-screen pass*
+2. **Make sure the app actually works for editing any and all of these flows** — others will need
+   to make content edits after this. This is the next real workstream, and it collides with the
+   auth question above.
+
 ## ← START HERE ON RESUME
 
 1. **User has still not visually reviewed any of this.** They review in the running app, not

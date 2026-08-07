@@ -7,7 +7,9 @@ import {
   addBlock, addConnection, removeConnection, setConnectionLabel,
   moveBlock, resizeBlock, resetLayout, renameDoc, setDescription, clearDoc,
 } from '../core/operations';
-import { getDoc, saveDoc, removeDoc, ConflictError, ProtectedError } from '../data/library';
+import { getDoc, saveDoc, removeDoc, ConflictError, ProtectedError, UnauthorizedError } from '../data/library';
+import { SignInDialog } from '../auth/SignIn';
+import { useAuthed } from '../auth/useAuthed';
 import { listFlows, resolveFlow, isOfficial, type FlowSummary } from '../library/flows';
 import { StorageModeBanner } from './StorageModeBanner';
 import { DiagramCanvas } from '../canvas/DiagramCanvas';
@@ -56,12 +58,16 @@ export function EditorScreen() {
   const connectable = shown.preset === 'flowchart' || shown.preset === 'decisionTree';
   const errors = useMemo(() => getPreset(shown.preset).validate(shown), [shown]);
 
-  // Official flows open read-only and are unlocked per-document by an explicit confirm.
-  // The confirm is a speed-bump against accidents, not a permission — anyone with the app
-  // password can unlock. Real authorization needs an identity model the app does not have.
+  // Two independent reasons the canvas can be read-only, and they stack:
+  //  1. Not signed in — anyone may read, only the team password may write (server-enforced).
+  //  2. Signed in, but this is an official flow that hasn't been unlocked yet. That confirm
+  //     is a speed-bump against accidents, not a permission: anyone holding the password can
+  //     unlock. Real authorization needs an identity model the app does not have.
+  const canEdit = useAuthed();
+  const [signInOpen, setSignInOpen] = useState(false);
   const [unlockedId, setUnlockedId] = useState<string | null>(null);
   const official = isOfficial(doc);
-  const readOnly = official && unlockedId !== doc.id;
+  const readOnly = !canEdit || (official && unlockedId !== doc.id);
 
   const unlockOfficial = () => {
     const ok = window.confirm(
@@ -89,6 +95,7 @@ export function EditorScreen() {
   }, []);
 
   const save = useCallback(async (d: KnowflowDoc) => {
+    if (!canEdit) return; // anonymous reader: the server would 401 anyway
     if (isOfficial(d) && unlockedId !== d.id) return; // locked official flow: nothing to save
     try {
       await saveDoc(d, lastSynced.current ?? undefined);
@@ -96,9 +103,10 @@ export function EditorScreen() {
       upsertSummary(d);
     } catch (e) {
       if (e instanceof ConflictError) { setConflict(true); throw e; } // surface; leave status not-saved
+      if (e instanceof UnauthorizedError) { setSignInOpen(true); throw e; } // session expired mid-edit
       throw e;
     }
-  }, [upsertSummary, unlockedId]);
+  }, [upsertSummary, unlockedId, canEdit]);
   const status = useAutosave(doc, save);
 
   // Load the shared library on startup: open the most recent diagram, or seed a blank one.
@@ -117,6 +125,15 @@ export function EditorScreen() {
       setLoading(false);
     })();
   }, [resetDoc]);
+
+  // Signing in widens the read scope from official-only to the whole library, so the list
+  // must be refetched — the team's own flows were never sent to an anonymous session.
+  const lastCanEdit = useRef(canEdit);
+  useEffect(() => {
+    if (lastCanEdit.current === canEdit) return;
+    lastCanEdit.current = canEdit;
+    listFlows().then(setLibrary);
+  }, [canEdit]);
 
   const switchTo = (next: KnowflowDoc) => {
     resetDoc(next); lastSynced.current = next.meta.updatedAt;
@@ -291,7 +308,12 @@ export function EditorScreen() {
               {connectMode ? 'Connecting…' : 'Connect'}
             </button>
           )}
-          {readOnly ? (
+          {!canEdit ? (
+            <button className="tbtn unlock" onClick={() => setSignInOpen(true)}
+              title="Reading is open to everyone. Editing needs the team password.">
+              🔒 Sign in to edit
+            </button>
+          ) : readOnly ? (
             <button className="tbtn unlock" onClick={unlockOfficial}
               title="Official team flow — click to edit it for everyone.">
               🔒 Official · Edit
@@ -319,9 +341,15 @@ export function EditorScreen() {
                 )}
                 <button onClick={() => doExport('png')}>Download PNG</button>
                 <button onClick={() => doExport('pdf')}>Download PDF</button>
-                <button onClick={() => { setMoreOpen(false); setShowHistory(true); }}
-                  title="Past versions of this diagram — preview or restore.">Version history</button>
-                <button onClick={() => { setMoreOpen(false); setFeedbackOpen(true); }}>💬 Send feedback</button>
+                {/* History and feedback both hit password-gated endpoints — offering them to
+                    an anonymous reader would just produce a failed request. */}
+                {canEdit && (
+                  <button onClick={() => { setMoreOpen(false); setShowHistory(true); }}
+                    title="Past versions of this diagram — preview or restore.">Version history</button>
+                )}
+                {canEdit && (
+                  <button onClick={() => { setMoreOpen(false); setFeedbackOpen(true); }}>💬 Send feedback</button>
+                )}
                 {!readOnly && (
                   <button className="danger" onClick={() => { setMoreOpen(false); clearCanvas(); }}
                     title="Remove every block (asks first).">Clear all blocks</button>
@@ -392,6 +420,7 @@ export function EditorScreen() {
                 onNew={newBlank}
                 onGenerate={() => setShowGenerate(true)}
                 onDelete={handleDeleteDoc}
+                canEdit={canEdit}
               />
             </div>
           </aside>
@@ -412,10 +441,15 @@ export function EditorScreen() {
                   <p><b>Previewing an old version.</b></p>
                   <p>Editing is off while previewing. Restore this version, or go back to the current one.</p>
                 </div>
+              ) : !canEdit ? (
+                <div className="ro-note">
+                  <p><b>Read-only.</b></p>
+                  <p>Anyone can read these flows. Editing needs the team password — use <b>Sign in to edit</b> in the top bar. Follow the ↗ links and use Back to return.</p>
+                </div>
               ) : readOnly ? (
                 <div className="ro-note">
-                  <p><b>Starter flow — read-only.</b></p>
-                  <p>This is a curated reference flow. Editing your own copy comes next; for now, follow the ↗ links and use Back to return.</p>
+                  <p><b>Official flow — read-only.</b></p>
+                  <p>Curated team content. Use <b>🔒 Official · Edit</b> in the top bar to change it for everyone; the previous version is kept in history.</p>
                 </div>
               ) : selectedEdgeId ? (
                 <EdgeInspector
@@ -444,6 +478,8 @@ export function EditorScreen() {
 
         <ValidationHints errors={errors} />
       </div>
+
+      {signInOpen && <SignInDialog onClose={() => setSignInOpen(false)} />}
 
       {showGenerate && (
         <GeneratePanel

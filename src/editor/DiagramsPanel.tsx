@@ -13,6 +13,8 @@ interface Props {
   onNew: (preset: Preset) => void;
   onGenerate: () => void;
   onDelete: (id: string) => void;
+  /** Anonymous readers get the list and nothing that writes: no create, no AI, no delete. */
+  canEdit: boolean;
 }
 
 const TEAM_GROUP = 'Team flows';
@@ -42,7 +44,7 @@ function CollapsibleGroup({ title, count, collapsed, onToggle, children }: Group
   );
 }
 
-export function DiagramsPanel({ docs, activeId, onOpen, onNew, onGenerate, onDelete }: Props) {
+export function DiagramsPanel({ docs, activeId, onOpen, onNew, onGenerate, onDelete, canEdit }: Props) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(DEFAULT_COLLAPSED));
   const toggle = (title: string) =>
     setCollapsed(prev => {
@@ -60,7 +62,7 @@ export function DiagramsPanel({ docs, activeId, onOpen, onNew, onGenerate, onDel
         <span className="dp-doc-title">{d.title || '(untitled)'}</span>
         <span className="dp-doc-meta"><span className="dp-chip">{getPreset(d.preset).name}</span></span>
       </div>
-      {!d.official && (
+      {!d.official && canEdit && (
         <button className="dp-del" title="Delete" aria-label="Delete diagram"
           onClick={e => { e.stopPropagation(); onDelete(d.id); }}>×</button>
       )}
@@ -71,13 +73,17 @@ export function DiagramsPanel({ docs, activeId, onOpen, onNew, onGenerate, onDel
 
   return (
     <div className="dp">
-      <button className="dp-primary" onClick={onGenerate}>✨ Generate with AI</button>
+      {canEdit && (
+        <>
+          <button className="dp-primary" onClick={onGenerate}>✨ Generate with AI</button>
 
-      <select className="dp-new" value="" aria-label="New blank diagram"
-        onChange={e => { if (e.target.value) onNew(e.target.value as Preset); }}>
-        <option value="">+ New blank diagram…</option>
-        {ALL_PRESETS.map(p => <option key={p} value={p}>{getPreset(p).name}</option>)}
-      </select>
+          <select className="dp-new" value="" aria-label="New blank diagram"
+            onChange={e => { if (e.target.value) onNew(e.target.value as Preset); }}>
+            <option value="">+ New blank diagram…</option>
+            {ALL_PRESETS.map(p => <option key={p} value={p}>{getPreset(p).name}</option>)}
+          </select>
+        </>
+      )}
 
       <div className="dp-scroll">
         {officialTitles.map(title => {

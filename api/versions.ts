@@ -14,6 +14,9 @@ interface VercelResponse {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Deliberately still fully gated, unlike api/docs.ts. Reads of *current* flows are public;
+  // the editing trail is not — it is internal churn (who changed what, abandoned wording)
+  // that a reader has no use for, and it is the larger surface of the two.
   if (process.env.APP_PASSWORD && req.headers['x-app-password'] !== process.env.APP_PASSWORD) {
     res.status(401).json({ error: 'Unauthorized' }); return;
   }

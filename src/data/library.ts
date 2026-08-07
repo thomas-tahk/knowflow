@@ -46,6 +46,13 @@ export class ProtectedError extends Error {
   constructor(message = 'This flow is protected.') { super(message); this.name = 'Protected'; }
 }
 
+/** The server refused a write because the caller is not signed in. Reads are public; every
+ *  mutation needs the team password. Must never fall back to localStorage — writing an
+ *  anonymous edit to the visitor's own browser would look like it saved, and it did not. */
+export class UnauthorizedError extends Error {
+  constructor(message = 'Sign in to edit.') { super(message); this.name = 'Unauthorized'; }
+}
+
 async function call(path: string, init: RequestInit): Promise<Response> {
   return fetch(`/api/docs${path}`, {
     ...init,
@@ -80,10 +87,11 @@ export async function saveDoc(doc: KnowflowDoc, base?: string | null, opts?: { f
     if (res.status === 501) { setMode('unconfigured'); local.save(doc); return; }
     if (res.status === 409) throw new ConflictError();
     if (res.status === 403) throw new ProtectedError();
+    if (res.status === 401) throw new UnauthorizedError();
     if (!res.ok) throw new Error('save failed');
   } catch (e) {
     // Deliberate refusals must surface; only transport failures fall back to local.
-    if (e instanceof ConflictError || e instanceof ProtectedError) throw e;
+    if (e instanceof ConflictError || e instanceof ProtectedError || e instanceof UnauthorizedError) throw e;
     setMode('offline'); local.save(doc);
   }
 }
@@ -117,9 +125,10 @@ export async function removeDoc(id: string): Promise<void> {
     const res = await call(`?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
     if (res.status === 501) { setMode('unconfigured'); local.remove(id); return; }
     if (res.status === 403) throw new ProtectedError('Official flows cannot be deleted.');
+    if (res.status === 401) throw new UnauthorizedError();
     if (!res.ok) throw new Error('delete failed');
   } catch (e) {
-    if (e instanceof ProtectedError) throw e;
+    if (e instanceof ProtectedError || e instanceof UnauthorizedError) throw e;
     setMode('offline'); local.remove(id);
   }
 }

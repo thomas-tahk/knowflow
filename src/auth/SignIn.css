@@ -1,6 +1,6 @@
 .auth {
-  height: 100vh; display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(circle at 1px 1px, #E1DACB 1px, transparent 0) 0 0 / 26px 26px, #F6F2EA;
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  background: rgba(41, 40, 31, .38);
 }
 .auth-card {
   width: 320px; max-width: 90%; background: #FFFEFB; border: 1px solid #E4DBCD; border-radius: 16px;
@@ -21,3 +21,8 @@
 }
 .auth-go:disabled { opacity: .5; cursor: not-allowed; }
 .auth-go:hover:not(:disabled) { background: #0d655e; }
+.auth-cancel {
+  font: inherit; font-size: 12.5px; cursor: pointer; color: #978D7C;
+  background: none; border: 0; padding: 2px;
+}
+.auth-cancel:hover { color: #29281F; text-decoration: underline; }

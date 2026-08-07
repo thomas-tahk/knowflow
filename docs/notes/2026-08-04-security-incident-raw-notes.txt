@@ -1,0 +1,11 @@
+LETS Talk modifications
+	•	Create incident needs to be removed
+	•	Just should end on direct user to call Service Desk (or ticket resolved)
+
+The different flow paths are not mutually exclusive  Dark web edits: => origination – google part is a separate branch/flow (where end user will be notified to change password) 
+        > users may disregard, may report as phishing, some call service desk
+                 > go ahead and direct customer to change password (customer’s not even aware of the google notification) => Infosec or CASA will create task to reset password to service desk
+
+Compromised account/device: > notify user (edit it down for phone number available) > instead of ‘instructs’, make it say ‘relays’ this information (within Security Tasks) for user to sign out of all devices > left channel goes straight to reset password > for right channel   Security Tasks > 3 – reset azure tokens, for both CASA and InfoSec creates task for Server Ops to complete  >> Request to Server Ops to reset azure tokens (InfoSec/CASA) > might be best to path 2 different boxes towards same end point/box > orange for CASA, blue for InfoSec,   Malware/Virus/Takeover > P1 for left channel (fake helpdesk), concerning VIP, and if issue is systematic/more than an isolated incident  > Reset – create P1 (follow KB) – (send to InfoSec) Security Tasks
+
+

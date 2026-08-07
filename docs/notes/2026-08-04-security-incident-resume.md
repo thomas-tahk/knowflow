@@ -96,23 +96,44 @@ Also: **`.flow-backbar` moved from dead-center top to top-left** (`EditorScreen.
 `left: 50%; transform: translateX(-50%)`, i.e. sitting exactly on top of the first node of every
 top-down flow. Only CSS changed; `EditorScreen.tsx` untouched (see PR note below).
 
-## Open — decisions for the user
+## Decisions taken 2026-08-07
 
-1. **Reset Password ↔ Security Tasks is redundant.** The incident flows each have a standalone
-   *Reset Password* door, then link to *Security Tasks*, whose own first step is *Reset the
-   password*. Two ways out, and it's a content call, not a code one:
-   - **(a)** Drop the standalone reset from the incident flows; Security Tasks owns it. One place,
-     but hides Service Desk's most immediate action behind a door.
-   - **(b)** Drop the reset step from Security Tasks and let it start at sign-out. Keeps the
-     incident flows honest about the first action; makes Security Tasks incomplete on its own.
-   No recommendation without knowing whether Security Tasks gets read standalone.
-2. **Auth model.** Today: one shared `APP_PASSWORD`, everyone who has it can edit. The user wants
-   *read-only for everyone except themselves*, or fully open — but explicitly does **not** want to
-   build real auth while the app's future is uncertain. Cheapest option that fits: keep the shared
-   password as an **edit** unlock and make unauthenticated access read-only, which is close to how
-   the official-flow lock already behaves. Not designed yet.
-3. **Migration / portability.** No specific plan, but keep future re-platforming in mind — avoid
-   deepening the Supabase coupling without cause.
+### 1. Reset Password is owned by Security Tasks — DONE (commit below)
+
+User chose option (a): drop the standalone *Reset Password* door from the incident flows and let
+Security Tasks own the link. Removed `ca-reset` (Compromised Account) and `mw-reset` (Malware);
+their upstream nodes now go straight to the next step.
+
+**Deliberate exception — `secDarkwebPassword` keeps `dw-reset`.** That flow has no *Security Tasks*
+node at all, so the reset there isn't redundant with anything; removing it would leave the flow with
+no reset action. Only two flows had the actual duplication.
+
+Side effect worth an eye on screen: in Malware the reset used to happen *before* the P1 decision.
+It now happens inside Security Tasks, i.e. after the P1 is created. If Service Desk must reset
+first regardless, that ordering needs revisiting.
+
+### 2. Auth: public read-only, shared password to edit — DECIDED, NOT BUILT
+
+User confirmed: anyone hitting the URL can read; editing stays behind the existing shared
+`APP_PASSWORD` (intended audience: the Service Desk team). No per-user identity, no real auth.
+
+Touchpoints, all verified by reading the code:
+
+| File | Change |
+|---|---|
+| `api/docs.ts:9` | The gate rejects **every** request without the header, including `GET`. Enforce it only on `PUT`/`POST`/`DELETE` |
+| `api/versions.ts` | Read-only history endpoint — confirm whether it carries the same blanket gate, and if so give it the same treatment |
+| `src/auth/AuthGate.tsx:6-9` | Currently blocks the whole app until authenticated. Should render children unauthenticated and expose a "sign in to edit" path instead |
+| `src/auth/session.ts` | `authHeaders()` already no-ops when there's no password — reads will just work once the server allows them |
+| Editor UI | Needs a read-only-by-default state for anonymous viewers, distinct from the existing official-flow lock |
+
+**Sequencing warning:** PR #13 (`chore/verify-spine`) touches `api/docs.ts`, `api/login.ts`,
+`EditorScreen.tsx` and `DiagramsPanel.tsx` — the same surface. **Merge #13 first, then branch for
+auth**, or the conflict is guaranteed. This content branch deliberately stays clear of those files.
+
+### 3. Migration / portability — noted, no action
+
+No specific plan; avoid deepening the Supabase coupling without cause.
 
 ## PR pile-up — checked, the fear is unfounded
 

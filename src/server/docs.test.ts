@@ -8,6 +8,8 @@ const state: {
   written: Record<string, unknown>[];
   deleted: string[];
   result: unknown;
+  /** Every `.eq(column, value)` applied to a `documents` query, in order. */
+  filters: [string, unknown][];
   versions: {
     /** Result of any select on document_versions (coalesce check, listVersions). */
     queryResult: Record<string, unknown>[];
@@ -19,7 +21,7 @@ const state: {
     insertError: string | null;
   };
 } = {
-  existing: null, written: [], deleted: [], result: [],
+  existing: null, written: [], deleted: [], result: [], filters: [],
   versions: { queryResult: [], single: null, inserted: [], insertError: null },
 };
 
@@ -29,7 +31,7 @@ function documentsBuilder() {
   Object.assign(b, {
     select: chain,
     order: chain,
-    eq: chain,
+    eq: (col: string, val: unknown) => { state.filters.push([col, val]); return b; },
     in: chain,
     maybeSingle: async () => ({ data: state.existing, error: null }),
     upsert: (row: Record<string, unknown>) => { state.written.push(row); return b; },
@@ -76,7 +78,7 @@ vi.mock('@supabase/supabase-js', () => ({
 process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_SERVICE_KEY = 'test-key';
 
-const { saveDoc, deleteDoc, listVersions, getVersion, OfficialProtected } = await import('./docs');
+const { listDocs, getDoc, saveDoc, deleteDoc, listVersions, getVersion, OfficialProtected } = await import('./docs');
 
 function doc(overrides: Partial<KnowflowDoc> = {}): KnowflowDoc {
   return {
@@ -98,7 +100,7 @@ function outgoingRow(overrides: Record<string, unknown> = {}): Record<string, un
 const editedDoc = () => doc({ meta: { ...doc().meta, updatedAt: 'new-token' } });
 
 beforeEach(() => {
-  state.existing = null; state.written = []; state.deleted = []; state.result = [];
+  state.existing = null; state.written = []; state.deleted = []; state.result = []; state.filters = [];
   state.versions = { queryResult: [], single: null, inserted: [], insertError: null };
 });
 
@@ -265,5 +267,30 @@ describe('version history reads', () => {
   it('getVersion returns null for an unknown version id', async () => {
     state.versions.single = null;
     expect(await getVersion(999)).toBeNull();
+  });
+});
+
+describe('read scope — anonymous callers see official flows only', () => {
+  it('listDocs("official") filters on status in the query, not after the fact', async () => {
+    state.result = [];
+    await listDocs('official');
+    expect(state.filters).toContainEqual(['status', 'official']);
+  });
+
+  it('listDocs() defaults to the whole library for a signed-in caller', async () => {
+    state.result = [];
+    await listDocs();
+    expect(state.filters).toHaveLength(0);
+  });
+
+  it('getDoc(id, "official") will not return a team draft', async () => {
+    await getDoc('d1', 'official');
+    expect(state.filters).toContainEqual(['id', 'd1']);
+    expect(state.filters).toContainEqual(['status', 'official']);
+  });
+
+  it('getDoc(id) filters by id alone for a signed-in caller', async () => {
+    await getDoc('d1');
+    expect(state.filters).toEqual([['id', 'd1']]);
   });
 });

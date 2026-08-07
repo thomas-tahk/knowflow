@@ -6,7 +6,10 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // `.claude/worktrees/*` holds full checkouts of the repo, each with its own tsconfig.
+  // Without this, a local lint run sees several candidate roots and fails to parse every
+  // file — the failure CI never reproduces, because CI has no worktrees.
+  globalIgnores(['dist', '.claude']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

@@ -6,15 +6,26 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { listDocs, getDoc, saveDoc, deleteDoc, StorageNotConfigured, ConflictError, OfficialProtected } from '../src/server/docs.js';
 
+/** True when the caller holds the team password — or when no password is configured at all
+ *  (local dev / an unconfigured deployment), where there is nothing to authenticate against. */
+function authed(req: VercelRequest): boolean {
+  const expected = process.env.APP_PASSWORD;
+  return !expected || req.headers['x-app-password'] === expected;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (process.env.APP_PASSWORD && req.headers['x-app-password'] !== process.env.APP_PASSWORD) {
+  // Reads are public, writes are not. An anonymous reader sees official flows only
+  // (src/server/docs.ts ReadScope); every mutation still requires the shared password.
+  const canWrite = authed(req);
+  if (req.method !== 'GET' && !canWrite) {
     res.status(401).json({ error: 'Unauthorized' }); return;
   }
   try {
     if (req.method === 'GET') {
+      const scope = canWrite ? 'all' : 'official';
       const id = req.query?.id;
-      if (id) { res.status(200).json(await getDoc(String(id))); return; }
-      res.status(200).json(await listDocs()); return;
+      if (id) { res.status(200).json(await getDoc(String(id), scope)); return; }
+      res.status(200).json(await listDocs(scope)); return;
     }
     if (req.method === 'PUT' || req.method === 'POST') {
       const { doc, base, forceArchive } = req.body ?? {};

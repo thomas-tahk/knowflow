@@ -6,3 +6,6 @@ dist/
 .env
 .env.*
 .DS_Store
+
+# worktrees created by Claude Code — full checkouts, never repo content
+.claude/worktrees/

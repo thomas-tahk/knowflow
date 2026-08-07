@@ -33,9 +33,18 @@ function client(): SupabaseClient {
   return cached;
 }
 
-export async function listDocs(): Promise<DocSummary[]> {
-  const { data, error } = await client()
-    .from(TABLE).select('id,title,preset,status,updated_at,topic,sort_order').order('updated_at', { ascending: false });
+/** How much of the library a caller may read.
+ *  - `all`      — authenticated: official flows plus the team's own drafts.
+ *  - `official` — anonymous: curated flows only. Team drafts are work-in-progress and must
+ *                 never reach someone who merely holds the public URL.
+ *  Enforced in the SQL query rather than by filtering the result, so an anonymous request
+ *  never pulls a draft over the wire in the first place. */
+export type ReadScope = 'all' | 'official';
+
+export async function listDocs(scope: ReadScope = 'all'): Promise<DocSummary[]> {
+  const base = client().from(TABLE).select('id,title,preset,status,updated_at,topic,sort_order');
+  const { data, error } = await (scope === 'official' ? base.eq('status', 'official') : base)
+    .order('updated_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []).map(r => ({
     id: r.id, title: r.title, preset: r.preset, status: r.status, updatedAt: r.updated_at,
@@ -43,8 +52,9 @@ export async function listDocs(): Promise<DocSummary[]> {
   }));
 }
 
-export async function getDoc(id: string): Promise<KnowflowDoc | null> {
-  const { data, error } = await client().from(TABLE).select('data').eq('id', id).maybeSingle();
+export async function getDoc(id: string, scope: ReadScope = 'all'): Promise<KnowflowDoc | null> {
+  const base = client().from(TABLE).select('data').eq('id', id);
+  const { data, error } = await (scope === 'official' ? base.eq('status', 'official') : base).maybeSingle();
   if (error) throw new Error(error.message);
   return (data?.data as KnowflowDoc | undefined) ?? null;
 }

@@ -1,7 +1,9 @@
 // Vercel serverless function: relays in-app feedback to the team's Discord channel.
 // The webhook URL stays server-side (never in the client bundle). Delivery happens from
 // Vercel's cloud, so it is unaffected by whatever network the user's browser is on.
-export default async function handler(req: any, res: any) {
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method Not Allowed' }); return; }
   if (process.env.APP_PASSWORD && req.headers['x-app-password'] !== process.env.APP_PASSWORD) {
     res.status(401).json({ error: 'Unauthorized' }); return;

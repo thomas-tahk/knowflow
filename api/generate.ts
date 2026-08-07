@@ -5,9 +5,10 @@
 // where extensionless / directory imports throw ERR_MODULE_NOT_FOUND (surfaces as
 // FUNCTION_INVOCATION_FAILED). Dev/build don't hit this file (dev uses Vite
 // ssrLoadModule on src/server/generate.ts directly).
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { generateDiagram } from '../src/server/generate.js';
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method Not Allowed' });
     return;

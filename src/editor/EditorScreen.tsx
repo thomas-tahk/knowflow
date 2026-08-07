@@ -204,7 +204,7 @@ export function EditorScreen() {
       const el = document.activeElement as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return; // let fields handle their own
       if (previewing) return; // previewing an old version: editing (incl. undo/redo) is off
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
       if (e.key === 'Escape') setConnectMode(false);
       else if ((e.key === 'c' || e.key === 'C') && connectable) setConnectMode(m => !m);

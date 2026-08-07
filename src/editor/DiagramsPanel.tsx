@@ -47,7 +47,7 @@ export function DiagramsPanel({ docs, activeId, onOpen, onNew, onGenerate, onDel
   const toggle = (title: string) =>
     setCollapsed(prev => {
       const next = new Set(prev);
-      next.has(title) ? next.delete(title) : next.add(title);
+      if (next.has(title)) next.delete(title); else next.add(title);
       return next;
     });
 

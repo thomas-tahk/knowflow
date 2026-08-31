@@ -5,7 +5,7 @@ const listDocs = vi.fn<() => Promise<DocSummary[]>>();
 const getDoc = vi.fn<(id: string) => Promise<unknown>>();
 vi.mock('../data/library', () => ({ listDocs: () => listDocs(), getDoc: (id: string) => getDoc(id) }));
 
-import { isOfficial, resolveFlow, listFlows } from './flows';
+import { isOfficial, resolveFlow, listFlows, orderedTopics, type FlowSummary } from './flows';
 import { STARTER_FLOWS } from './starterFlows';
 
 const mine: DocSummary = { id: 'mine', title: 'Mine', preset: 'flowchart', status: 'draft', updatedAt: 'z' };
@@ -78,5 +78,29 @@ describe('listFlows', () => {
       expect(typeof s.sortOrder, `${s.id} sortOrder`).toBe('number');
     }
     expect(flows.find(f => f.id === 'mine')?.group).toBeUndefined();
+  });
+});
+
+describe('orderedTopics', () => {
+  const flow = (group: string, official = true) =>
+    ({ id: group + Math.random(), title: 't', preset: 'flowchart', status: official ? 'official' : 'draft',
+       updatedAt: 'x', group, official }) as FlowSummary;
+
+  it('keeps bundled topics in their curated order, not alphabetical', () => {
+    const topics = orderedTopics([flow('Security Incident Intake'), flow('Account & Access')]);
+    expect(topics).toEqual(['Account & Access', 'Security Incident Intake']);
+  });
+
+  it('appends topics invented in the app, alphabetically, after the bundled ones', () => {
+    const topics = orderedTopics([flow('Printers'), flow('Account & Access'), flow('Hardware')]);
+    expect(topics).toEqual(['Account & Access', 'Hardware', 'Printers']);
+  });
+
+  it('omits a topic no flow uses', () => {
+    expect(orderedTopics([flow('Account & Access')])).toEqual(['Account & Access']);
+  });
+
+  it('ignores drafts — they are filed under no topic', () => {
+    expect(orderedTopics([flow('Hardware', false)])).toEqual([]);
   });
 });

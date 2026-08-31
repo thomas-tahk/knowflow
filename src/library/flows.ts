@@ -58,3 +58,17 @@ export async function listFlows(): Promise<FlowSummary[]> {
     ...unseeded,
   ];
 }
+
+/**
+ * Topic headings to render, derived from the flows themselves rather than the bundled registry —
+ * a topic invented in the app must appear without a code change.
+ *
+ * Bundled topics keep their curated order so the familiar library does not reshuffle; anything
+ * new follows, alphabetically, so the order is at least predictable.
+ */
+export function orderedTopics(docs: FlowSummary[]): string[] {
+  const present = new Set(docs.filter(d => d.official && d.group).map(d => d.group as string));
+  const bundled = STARTER_GROUPS.map(g => g.title).filter(t => present.has(t));
+  const invented = [...present].filter(t => !bundled.includes(t)).sort((a, b) => a.localeCompare(b));
+  return [...bundled, ...invented];
+}

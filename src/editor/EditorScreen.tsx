@@ -7,10 +7,13 @@ import {
   addBlock, addConnection, removeConnection, setConnectionLabel,
   moveBlock, resizeBlock, resetLayout, renameDoc, setDescription, clearDoc,
 } from '../core/operations';
-import { getDoc, saveDoc, removeDoc, ConflictError, ProtectedError, UnauthorizedError } from '../data/library';
+import {
+  getDoc, saveDoc, removeDoc, publishFlow, unpublishFlow, reorderFlows,
+  ConflictError, ProtectedError, UnauthorizedError, StaleOrderError,
+} from '../data/library';
 import { SignInDialog } from '../auth/SignIn';
 import { useAuthed } from '../auth/useAuthed';
-import { listFlows, resolveFlow, isOfficial, type FlowSummary } from '../library/flows';
+import { listFlows, resolveFlow, isOfficial, orderedTopics, type FlowSummary } from '../library/flows';
 import { StorageModeBanner } from './StorageModeBanner';
 import { DiagramCanvas } from '../canvas/DiagramCanvas';
 import { FishboneCanvas } from '../canvas/FishboneCanvas';
@@ -20,6 +23,7 @@ import { EdgeInspector } from './EdgeInspector';
 import { DiagramsPanel } from './DiagramsPanel';
 import { GeneratePanel } from './GeneratePanel';
 import { HistoryModal } from './HistoryModal';
+import { PublishModal } from './PublishModal';
 import { ValidationHints } from './ValidationHints';
 import { FeedbackModal } from './FeedbackButton';
 import { useAutosave } from './useAutosave';
@@ -37,6 +41,7 @@ export function EditorScreen() {
   const [connectMode, setConnectMode] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showPublish, setShowPublish] = useState(false);
   // A previewed old version renders in the canvas as its own state, never as `doc` —
   // the autosave hook only watches `doc`, so previewing can't save old content over
   // the current version (safe by construction, not by a guard flag).
@@ -210,6 +215,43 @@ export function EditorScreen() {
     setLibrary(rest);
     if (id === doc.id) { if (rest.length) openFlow(rest[0].id); else newBlank('flowchart'); }
   };
+  // Publishing, refiling and reordering go through /api/placement, never the save path:
+  // where a flow lives is a separate decision from what it says, and no autosave can carry it.
+  const publishCurrent = async (topic: string) => {
+    await publishFlow(doc.id, topic);
+    setDoc({ ...doc, meta: { ...doc.meta, status: 'official' } });
+    // The publish was the deliberate act — don't lock the editor behind the unlock confirm
+    // the instant it becomes an official flow.
+    setUnlockedId(doc.id);
+    setLibrary(await listFlows()); // topic and position are server-assigned; read them back
+    setShowPublish(false);
+  };
+
+  const unpublishCurrent = async () => {
+    const ok = window.confirm(
+      `Take "${doc.title || 'Untitled'}" out of the library?\n\n` +
+      'It becomes a draft again: still here for the team, no longer visible to readers ' +
+      'and no longer filed under a topic. You can publish it again at any time.',
+    );
+    if (!ok) return;
+    setMoreOpen(false);
+    await unpublishFlow(doc.id);
+    setDoc({ ...doc, meta: { ...doc.meta, status: 'draft' } });
+    setLibrary(await listFlows());
+  };
+
+  const handleReorder = async (topic: string, ids: string[]) => {
+    const position = new Map(ids.map((id, i) => [id, i]));
+    // Move the row now, ask the server after: a sidebar that lags a click feels broken.
+    setLibrary(prev => prev.map(s => (position.has(s.id) ? { ...s, sortOrder: position.get(s.id) } : s)));
+    try {
+      await reorderFlows(topic, ids);
+    } catch (e) {
+      if (e instanceof StaleOrderError) window.alert(e.message);
+      setLibrary(await listFlows()); // the optimistic order was wrong — show what is actually stored
+    }
+  };
+
   const clearCanvas = () => {
     if (!window.confirm('Clear this diagram? All blocks will be removed.')) return;
     setDoc(clearDoc(doc)); setSelectedId(null); setSelectedEdgeId(null);
@@ -347,6 +389,18 @@ export function EditorScreen() {
                   <button onClick={() => { setMoreOpen(false); setShowHistory(true); }}
                     title="Past versions of this diagram — preview or restore.">Version history</button>
                 )}
+                {canEdit && !official && (
+                  <button onClick={() => { setMoreOpen(false); setShowPublish(true); }}
+                    title="Add this flow to the shared library so the team and readers can find it.">📌 Publish to library…</button>
+                )}
+                {canEdit && official && (
+                  <button onClick={() => { setMoreOpen(false); setShowPublish(true); }}
+                    title="File this flow under a different topic.">Move to another topic…</button>
+                )}
+                {canEdit && official && (
+                  <button onClick={unpublishCurrent}
+                    title="Take it out of the library and back to drafts (asks first).">Unpublish</button>
+                )}
                 {canEdit && (
                   <button onClick={() => { setMoreOpen(false); setFeedbackOpen(true); }}>💬 Send feedback</button>
                 )}
@@ -420,6 +474,7 @@ export function EditorScreen() {
                 onNew={newBlank}
                 onGenerate={() => setShowGenerate(true)}
                 onDelete={handleDeleteDoc}
+                onReorder={handleReorder}
                 canEdit={canEdit}
               />
             </div>
@@ -495,6 +550,16 @@ export function EditorScreen() {
           onClose={() => setShowHistory(false)}
           onPreview={previewVersion}
           onRestore={restoreVersion}
+        />
+      )}
+
+      {showPublish && (
+        <PublishModal
+          title={doc.title}
+          topics={orderedTopics(library)}
+          currentTopic={library.find(s => s.id === doc.id)?.group}
+          onCancel={() => setShowPublish(false)}
+          onPublish={publishCurrent}
         />
       )}
 

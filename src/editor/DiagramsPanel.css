@@ -62,3 +62,12 @@
   font-size: 10px; font-weight: 700; letter-spacing: 0;
   padding: 1px 6px; border-radius: 999px; background: #EFE7D8; color: #7a6f5a;
 }
+
+.dp-move { display: none; flex-direction: column; gap: 1px; margin-right: 2px; }
+.dp-doc:hover .dp-move, .dp-doc.on .dp-move { display: flex; }
+.dp-arrow {
+  border: 0; background: none; cursor: pointer; padding: 0 3px; line-height: 1;
+  font-size: 9px; color: #8A857A; border-radius: 3px;
+}
+.dp-arrow:hover:not(:disabled) { background: #EAF1EF; color: #29281F; }
+.dp-arrow:disabled { opacity: 0.25; cursor: default; }

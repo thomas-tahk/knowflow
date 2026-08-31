@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { buildSeedRows } from './seedFlows';
+import { buildSeedRows, editedInApp } from './seedFlows';
 import { STARTER_FLOWS, STARTER_GROUPS } from '../src/library/starterFlows';
 
 const run = promisify(execFile);
@@ -63,4 +63,29 @@ describe('npm run seed:flows', () => {
     expect(failure?.code).toBe(1);
     expect(failure?.stderr).toContain('Missing SUPABASE_URL');
   }, 60_000);
+});
+
+describe('editedInApp — the guard against re-seeding over app edits', () => {
+  const seed = buildSeedRows();
+  const first = seed[0];
+
+  it('flags a flow whose stored copy has a newer updated_at than the bundle', () => {
+    const stored = [{ id: first.id, title: 'Reset Password', updated_at: '2030-01-01T00:00:00.000Z' }];
+    expect(editedInApp(stored, seed)).toEqual(['Reset Password']);
+  });
+
+  it('says nothing about a flow that still matches the bundle', () => {
+    const stored = [{ id: first.id, title: first.title, updated_at: first.updated_at }];
+    expect(editedInApp(stored, seed)).toEqual([]);
+  });
+
+  it('ignores rows that are not part of the seed at all', () => {
+    const stored = [{ id: 'some-team-draft', title: 'Draft', updated_at: '2030-01-01T00:00:00.000Z' }];
+    expect(editedInApp(stored, seed)).toEqual([]);
+  });
+
+  it('falls back to the id when a stored row has no title', () => {
+    const stored = [{ id: first.id, title: null, updated_at: '2030-01-01T00:00:00.000Z' }];
+    expect(editedInApp(stored, seed)).toEqual([first.id]);
+  });
 });

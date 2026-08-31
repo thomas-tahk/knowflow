@@ -132,3 +132,37 @@ export async function removeDoc(id: string): Promise<void> {
     setMode('offline'); local.remove(id);
   }
 }
+
+/** The server refused an ordering built from a stale copy of the library. */
+export class StaleOrderError extends Error {
+  constructor(message = 'The library changed — reload and try again.') { super(message); this.name = 'StaleOrder'; }
+}
+
+// Placement is cloud-only: topic and position are columns on the shared row, and localStorage
+// has no library to publish into. Callers check getStorageMode() and hide the controls offline.
+async function patchPlacement(query: string, body: Record<string, unknown>): Promise<void> {
+  if (usingLocal()) throw new Error('Publishing needs the shared library — you are working offline.');
+  const res = await fetch(`/api/placement${query}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new UnauthorizedError();
+  if (res.status === 409) throw new StaleOrderError();
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'That change did not go through.');
+}
+
+/** Publish a draft into the shared library under `topic`, or refile a published flow. */
+export async function publishFlow(id: string, topic: string): Promise<void> {
+  return patchPlacement(`?id=${encodeURIComponent(id)}`, { status: 'official', topic });
+}
+
+/** Take a flow back out of the shared library. It becomes an ordinary draft again. */
+export async function unpublishFlow(id: string): Promise<void> {
+  return patchPlacement(`?id=${encodeURIComponent(id)}`, { status: 'draft' });
+}
+
+/** Rewrite the order of a whole topic. `ids` must name exactly the flows currently in it. */
+export async function reorderFlows(topic: string, ids: string[]): Promise<void> {
+  return patchPlacement(`?topic=${encodeURIComponent(topic)}`, { ids });
+}

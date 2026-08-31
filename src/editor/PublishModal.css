@@ -1,0 +1,28 @@
+.pub-overlay {
+  position: fixed; inset: 0; background: rgba(41,40,31,.38);
+  display: flex; align-items: center; justify-content: center; z-index: 50; padding: 24px;
+}
+.pub-panel {
+  width: 440px; max-width: 100%;
+  background: #FFFEFB; border: 1px solid #EAE2D6; border-radius: 16px;
+  padding: 22px; display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 24px 60px -24px rgba(41,40,31,.45);
+}
+.pub-title { margin: 0; font-size: 18px; color: #29281F; }
+.pub-sub { margin: -4px 0 4px; font-size: 12.5px; color: #978D7C; line-height: 1.5; }
+.pub-label { font-size: 12px; font-weight: 700; color: #5C564B; text-transform: uppercase; letter-spacing: .04em; }
+.pub-input {
+  font: inherit; font-size: 14px; color: #29281F;
+  border: 1px solid #DED3C2; border-radius: 9px; padding: 8px 10px; background: #fff;
+}
+.pub-input:focus { outline: 2px solid #0F766E; outline-offset: 1px; }
+.pub-hint { margin: 0; font-size: 12.5px; color: #0F766E; }
+.pub-error { margin: 0; font-size: 13px; color: #8A4632; background: #F6E7E2; border: 1px solid #D9A18F; border-radius: 8px; padding: 8px 10px; }
+.pub-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.pub-btn {
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  border: 1px solid #DED3C2; background: #fff; color: #5C564B;
+  border-radius: 9px; padding: 7px 14px;
+}
+.pub-go { border-color: #0F766E; background: #0F766E; color: #fff; }
+.pub-btn:disabled { opacity: .5; cursor: not-allowed; }

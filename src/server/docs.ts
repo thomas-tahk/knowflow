@@ -188,3 +188,95 @@ export async function getVersion(id: number): Promise<KnowflowDoc | null> {
   if (error) throw new Error(error.message);
   return (data?.data as KnowflowDoc | undefined) ?? null;
 }
+
+/** Thrown when the targeted flow has no row. */
+export class NotFound extends Error {
+  constructor(message = 'No such flow.') { super(message); this.name = 'NotFound'; }
+}
+
+/** Thrown when a reorder list no longer matches the topic it claims to order. */
+export class StaleOrder extends Error {
+  constructor(message = 'That ordering is out of date — reload and try again.') {
+    super(message); this.name = 'StaleOrder';
+  }
+}
+
+/** Where a flow sits in the library: published or not, under which heading, in which position. */
+export interface Placement {
+  status?: 'draft' | 'official';
+  /** Blank or null files the flow under no heading — only legal for a draft. */
+  topic?: string | null;
+  sortOrder?: number;
+}
+
+/** Highest position currently used in a topic, or null when the topic is empty. */
+async function lastPosition(c: SupabaseClient, topic: string): Promise<number | null> {
+  const { data, error } = await c.from(TABLE)
+    .select('sort_order').eq('topic', topic).order('sort_order', { ascending: false }).limit(1);
+  if (error) throw new Error(error.message);
+  const top = data?.[0]?.sort_order;
+  return typeof top === 'number' ? top : null;
+}
+
+/**
+ * Move a flow within the library: publish it, refile it under another topic, reorder it, or
+ * demote it back to a draft.
+ *
+ * Deliberately separate from `saveDoc`, which still refuses to read status/topic/order off the
+ * client. Editing content and changing where a flow lives are different intents, and keeping
+ * them apart means no autosave can publish anything by accident.
+ *
+ * Content is untouched, so nothing is archived and `updated_at` is left alone — bumping it
+ * would invalidate the conflict token of an editor someone has open elsewhere.
+ */
+export async function setPlacement(id: string, placement: Placement): Promise<void> {
+  const c = client();
+  const existing = await readExisting(c, id);
+  if (!existing) throw new NotFound();
+
+  const status = placement.status ?? existing.status;
+  const requested = placement.topic === undefined ? existing.group : placement.topic;
+  const asked = requested?.trim() ? requested.trim() : null;
+  // Topics are a property of the published library; a draft is filed nowhere.
+  const topic = status === 'official' ? asked : null;
+
+  // A published flow with no topic would render under no heading — invisible in the library.
+  if (status === 'official' && !topic) throw new Error('Publishing needs a topic.');
+
+  let sortOrder: number | null;
+  if (status !== 'official') sortOrder = null;                       // drafts have no position
+  else if (placement.sortOrder !== undefined) sortOrder = placement.sortOrder;
+  else if (topic === existing.group) sortOrder = existing.sortOrder; // staying put: keep position
+  else sortOrder = ((await lastPosition(c, topic!)) ?? -1) + 1;      // new topic: append
+
+  // The blob carries its own copy of status; the two must never disagree (see saveDoc).
+  const data = existing.data && typeof existing.data === 'object'
+    ? { ...(existing.data as KnowflowDoc), meta: { ...(existing.data as KnowflowDoc).meta, status } }
+    : existing.data;
+
+  const { error } = await c.from(TABLE).update({ status, topic, sort_order: sortOrder, data }).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Rewrite every position in a topic to 0..n-1 in the order given.
+ *
+ * Rewriting the whole list rather than swapping neighbours means the result is always dense and
+ * unambiguous. The caller's list must name exactly the topic's current flows: a mismatch means
+ * the client is working from a stale library (someone else published or refiled meanwhile), and
+ * applying it would file a flow at the wrong position or drop one out of the ordering entirely.
+ */
+export async function reorderTopic(topic: string, orderedIds: string[]): Promise<void> {
+  const c = client();
+  const { data, error } = await c.from(TABLE).select('id').eq('topic', topic).eq('status', 'official');
+  if (error) throw new Error(error.message);
+
+  const current = new Set((data ?? []).map(r => String(r.id)));
+  const given = new Set(orderedIds);
+  if (current.size !== given.size || [...given].some(id => !current.has(id))) throw new StaleOrder();
+
+  for (const [position, id] of orderedIds.entries()) {
+    const { error: e } = await c.from(TABLE).update({ sort_order: position }).eq('id', id);
+    if (e) throw new Error(e.message);
+  }
+}

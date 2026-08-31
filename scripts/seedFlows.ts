@@ -12,6 +12,11 @@
  * Re-running restores the bundled version of every flow, discarding edits made in the app.
  * That is the intended "reset to the curated baseline" escape hatch — it is destructive to
  * later improvements, which is why it requires --force once rows already exist.
+ *
+ * Flows are edited in the app now, and this script writes straight to the table: it archives
+ * nothing, so a re-seed over an app-edited flow is the one way to lose work that version
+ * history cannot undo. Any such flow therefore stops the run, and discarding it has to be
+ * asked for by name: --force --discard-app-edits.
  */
 import { createClient } from '@supabase/supabase-js';
 import { STARTER_GROUPS } from '../src/library/starterFlows';
@@ -47,6 +52,22 @@ export function buildSeedRows(): SeedRow[] {
   );
 }
 
+/** A stored row, as far as the drift check cares. */
+interface StoredRow { id: string; title: string | null; updated_at: string | null }
+
+/**
+ * Titles of stored flows whose content no longer matches the bundle — edited in the app since
+ * they were seeded. Every in-app save writes a fresh `updated_at`; the bundled copy's is fixed,
+ * so a mismatch means someone changed the flow through the editor. (Publishing or refiling a
+ * flow does not bump it, so moving a flow between topics is not "drift".)
+ */
+export function editedInApp(stored: StoredRow[], seed: SeedRow[]): string[] {
+  const bundled = new Map(seed.map(r => [r.id, r.updated_at]));
+  return stored
+    .filter(r => bundled.has(r.id) && r.updated_at !== bundled.get(r.id))
+    .map(r => r.title ?? r.id);
+}
+
 export async function seedFlows(): Promise<void> {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_KEY;
@@ -63,7 +84,7 @@ export async function seedFlows(): Promise<void> {
   const supabase = createClient(url, key, { auth: { persistSession: false } });
 
   const { data: existing, error: readError } = await supabase
-    .from(TABLE).select('id').in('id', rows.map(r => r.id));
+    .from(TABLE).select('id,title,updated_at').in('id', rows.map(r => r.id));
   if (readError) { console.error(`Read failed: ${readError.message}`); process.exit(1); }
 
   const alreadyThere = existing?.length ?? 0;
@@ -72,6 +93,17 @@ export async function seedFlows(): Promise<void> {
       `\n${alreadyThere} of these flows already exist.\n` +
       'Re-seeding overwrites them with the bundled copies, discarding any edits made in the app.\n' +
       'Re-run with --force if that is what you want.',
+    );
+    process.exit(1);
+  }
+
+  const edited = editedInApp((existing ?? []) as StoredRow[], rows);
+  if (edited.length > 0 && !process.argv.includes('--discard-app-edits')) {
+    console.error(
+      `\n${edited.length} flow(s) have been edited in the app since they were seeded:\n` +
+      edited.map(t => `  - ${t}`).join('\n') +
+      '\n\nSeeding overwrites them with the bundled copies and archives nothing, so those\n' +
+      'edits would be gone for good. Re-run with --force --discard-app-edits to do it anyway.',
     );
     process.exit(1);
   }

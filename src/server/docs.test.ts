@@ -32,6 +32,7 @@ function documentsBuilder() {
     select: chain,
     order: chain,
     eq: (col: string, val: unknown) => { state.filters.push([col, val]); return b; },
+    limit: chain,
     in: chain,
     maybeSingle: async () => ({ data: state.existing, error: null }),
     upsert: (row: Record<string, unknown>) => { state.written.push(row); return b; },
@@ -78,7 +79,10 @@ vi.mock('@supabase/supabase-js', () => ({
 process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_SERVICE_KEY = 'test-key';
 
-const { listDocs, getDoc, saveDoc, deleteDoc, listVersions, getVersion, OfficialProtected } = await import('./docs');
+const {
+  listDocs, getDoc, saveDoc, deleteDoc, listVersions, getVersion,
+  OfficialProtected, setPlacement, reorderTopic, NotFound, StaleOrder,
+} = await import('./docs');
 
 function doc(overrides: Partial<KnowflowDoc> = {}): KnowflowDoc {
   return {
@@ -292,5 +296,101 @@ describe('read scope — anonymous callers see official flows only', () => {
   it('getDoc(id) filters by id alone for a signed-in caller', async () => {
     await getDoc('d1');
     expect(state.filters).toEqual([['id', 'd1']]);
+  });
+});
+
+describe('setPlacement — publishing, filing and demoting', () => {
+  it('promotes a draft and files it under the requested topic', async () => {
+    state.existing = outgoingRow({ data: { id: 'd1', meta: { status: 'draft' } } });
+    state.result = [{ sort_order: 4 }];
+    await setPlacement('d1', { status: 'official', topic: 'Account & Access' });
+    expect(state.written[0]).toMatchObject({ status: 'official', topic: 'Account & Access' });
+  });
+
+  it('rewrites the embedded blob so it cannot disagree with the column', async () => {
+    state.existing = outgoingRow({ data: { id: 'd1', meta: { status: 'draft' } } });
+    state.result = [];
+    await setPlacement('d1', { status: 'official', topic: 'Account & Access' });
+    const data = state.written[0].data as KnowflowDoc;
+    expect(data.meta.status).toBe('official');
+  });
+
+  it('appends to the end of the topic when no position is given', async () => {
+    state.existing = outgoingRow({ data: { id: 'd1', meta: { status: 'draft' } } });
+    state.result = [{ sort_order: 4 }]; // highest existing position in that topic
+    await setPlacement('d1', { status: 'official', topic: 'Account & Access' });
+    expect(state.written[0].sort_order).toBe(5);
+  });
+
+  it('starts a brand-new topic at position 0', async () => {
+    state.existing = outgoingRow({ data: { id: 'd1', meta: { status: 'draft' } } });
+    state.result = []; // no flows in this topic yet
+    await setPlacement('d1', { status: 'official', topic: 'Hardware' });
+    expect(state.written[0].sort_order).toBe(0);
+  });
+
+  it('never bumps updated_at — an editor open elsewhere keeps a valid conflict token', async () => {
+    state.existing = outgoingRow({ data: { id: 'd1', meta: { status: 'draft' } } });
+    state.result = [];
+    await setPlacement('d1', { status: 'official', topic: 'Account & Access' });
+    expect(state.written[0]).not.toHaveProperty('updated_at');
+  });
+
+  it('archives nothing — placement is not content', async () => {
+    state.existing = outgoingRow({ data: { id: 'd1', meta: { status: 'draft' } } });
+    state.result = [];
+    await setPlacement('d1', { status: 'official', topic: 'Account & Access' });
+    expect(state.versions.inserted).toHaveLength(0);
+  });
+
+  it('refuses to publish without a topic — it would render under no heading', async () => {
+    state.existing = outgoingRow({ data: { id: 'd1', meta: { status: 'draft' } } });
+    await expect(setPlacement('d1', { status: 'official', topic: '  ' })).rejects.toThrow(/topic/i);
+    expect(state.written).toHaveLength(0);
+  });
+
+  it('clears topic and position when demoting back to draft', async () => {
+    state.existing = outgoingRow({ status: 'official', topic: 'Account & Access', sort_order: 2,
+      data: { id: 'd1', meta: { status: 'official' } } });
+    await setPlacement('d1', { status: 'draft' });
+    expect(state.written[0]).toMatchObject({ status: 'draft', topic: null, sort_order: null });
+    expect((state.written[0].data as KnowflowDoc).meta.status).toBe('draft');
+  });
+
+  it('moves a published flow to another topic without changing its status', async () => {
+    state.existing = outgoingRow({ status: 'official', topic: 'Account & Access', sort_order: 2,
+      data: { id: 'd1', meta: { status: 'official' } } });
+    state.result = [{ sort_order: 7 }];
+    await setPlacement('d1', { topic: 'Security Incident Intake' });
+    expect(state.written[0]).toMatchObject({ status: 'official', topic: 'Security Incident Intake', sort_order: 8 });
+  });
+
+  it('throws NotFound for an id that has no row', async () => {
+    state.existing = null;
+    await expect(setPlacement('nope', { status: 'official', topic: 'X' })).rejects.toBeInstanceOf(NotFound);
+    expect(state.written).toHaveLength(0);
+  });
+});
+
+describe('reorderTopic — rewrites the whole topic, densely', () => {
+  it('assigns 0..n-1 in the order given', async () => {
+    state.result = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    await reorderTopic('Account & Access', ['c', 'a', 'b']);
+    expect(state.written).toEqual([
+      { sort_order: 0 }, { sort_order: 1 }, { sort_order: 2 },
+    ]);
+    expect(state.filters).toContainEqual(['id', 'c']);
+  });
+
+  it('rejects a stale list that does not match the topic exactly', async () => {
+    state.result = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    await expect(reorderTopic('Account & Access', ['a', 'b'])).rejects.toBeInstanceOf(StaleOrder);
+    expect(state.written).toHaveLength(0);
+  });
+
+  it('rejects a list naming a flow from another topic', async () => {
+    state.result = [{ id: 'a' }, { id: 'b' }];
+    await expect(reorderTopic('Account & Access', ['a', 'zzz'])).rejects.toBeInstanceOf(StaleOrder);
+    expect(state.written).toHaveLength(0);
   });
 });

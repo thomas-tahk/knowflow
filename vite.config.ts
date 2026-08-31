@@ -82,6 +82,30 @@ export default defineConfig(({ mode }) => {
             })()
           })
 
+          server.middlewares.use('/api/placement', (req, res) => {
+            const url = new URL(req.url ?? '', 'http://localhost')
+            const id = url.searchParams.get('id')
+            const topic = url.searchParams.get('topic')
+            readBody(req).then(async (payload) => {
+              try {
+                if (req.method !== 'PATCH') { res.statusCode = 405; res.end('Method Not Allowed'); return }
+                const mod = await server.ssrLoadModule('/src/server/docs.ts')
+                if (id) await mod.setPlacement(id, { status: payload.status, topic: payload.topic, sortOrder: payload.sortOrder })
+                else if (topic) await mod.reorderTopic(topic, (payload.ids as string[]) ?? [])
+                else { res.statusCode = 400; res.end('{"error":"id or topic required"}'); return }
+                res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ ok: true }))
+              } catch (e) {
+                // NotFound -> 404, StaleOrder -> 409, refusals (no topic) -> 400. Mirrors api/placement.ts.
+                const name = (e as Error)?.name
+                res.statusCode = name === 'StorageNotConfigured' ? 501
+                  : name === 'NotFound' ? 404
+                  : name === 'StaleOrder' ? 409 : 400
+                res.setHeader('content-type', 'application/json')
+                res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }))
+              }
+            })
+          })
+
           server.middlewares.use('/api/feedback', (req, res) => {
             if (req.method !== 'POST') { res.statusCode = 405; res.end('Method Not Allowed'); return }
             readBody(req).then(async (payload) => {

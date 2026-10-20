@@ -8,8 +8,8 @@ You'll end up with **5 environment variables**:
 |---|---|---|
 | `ANTHROPIC_API_KEY` | AI diagram generation | console.anthropic.com |
 | `APP_PASSWORD` | the shared team password | you choose it |
-| `SUPABASE_URL` | cloud storage project URL | Supabase → Settings → API |
-| `SUPABASE_SERVICE_KEY` | cloud storage secret key | Supabase → Settings → API (service_role) |
+| `SUPABASE_URL` | cloud storage project URL | Supabase → **Connect** button (bare `https://<ref>.supabase.co`) |
+| `SUPABASE_SERVICE_KEY` | cloud storage secret key | Supabase → Settings → **API Keys** (Secret key, `sb_secret_…`) |
 | `DISCORD_WEBHOOK_URL` | where feedback posts | Discord → Server Settings → Integrations → Webhooks |
 
 > Tip: to test everything locally first, put these same five in a `.env.local` file in the project root, then `npm run dev`. (`.env.local` is gitignored.)
@@ -50,10 +50,10 @@ You'll end up with **5 environment variables**:
    npm run seed:flows
    ```
    You should see "Success. No rows returned." (No row-level-security setup needed — only our server touches this table, using the secret key. `updated_at` is `text` on purpose — it's the exact token the concurrent-edit conflict check compares.)
-4. Open **Settings** (gear icon, bottom-left) → **API**. Copy two things:
-   - **Project URL** → this is your `SUPABASE_URL`
-   - Under **Project API keys**, the **`service_role`** key (click to reveal — it's the *secret* one, **not** `anon`) → this is your `SUPABASE_SERVICE_KEY`
-   - ⚠️ The `service_role` key is powerful — only ever paste it into a server env var, never share it or put it in client code. (Our app keeps it server-side.)
+4. Copy two things:
+   - **Project URL**: use the **Connect** button at the top of the project, or build it as `https://<project-ref>.supabase.co` → this is your `SUPABASE_URL`. Use the bare URL. If you paste the version ending in `/rest/v1` from the Data API page, requests fail with "invalid path specified in request url".
+   - **Settings** (gear icon) → **API Keys** → the **Secret key** (`sb_secret_…`, click to reveal; *not* the publishable key) → this is your `SUPABASE_SERVICE_KEY`. New projects no longer show a legacy `service_role` key by default. The secret key does the same job.
+   - ⚠️ The secret key is powerful — only ever paste it into a server env var, never share it or put it in client code. (Our app keeps it server-side.)
 
 ---
 
@@ -93,3 +93,9 @@ You'll end up with **5 environment variables**:
 - **Changing an env var later** requires a redeploy (Vercel → Deployments → ⋯ → Redeploy), or it happens automatically on your next push.
 - **Cost:** each AI generation calls Anthropic and costs money. The password gate limits this to your team. Keep an eye on usage in the Anthropic console.
 - **Storage fallback:** if `SUPABASE_URL`/`SUPABASE_SERVICE_KEY` are missing, the app silently uses each browser's localStorage instead — so if diagrams aren't shared/persisting, check those two vars are set in Vercel.
+
+---
+
+## Keeping the database awake
+
+Supabase's free plan pauses a project after about 7 days without database activity, and a paused project does not wake on request. `.github/workflows/keepalive.yml` queries the app daily to prevent that. **GitHub disables scheduled workflows in repos with no commits for 60 days**, so if the repo goes quiet that long, re-enable the workflow from the Actions tab (or push any commit).

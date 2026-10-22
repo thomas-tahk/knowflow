@@ -59,12 +59,12 @@
 <tr>
 <td><code>SUPABASE_URL</code></td>
 <td>cloud storage project URL</td>
-<td>Supabase → Settings → API</td>
+<td>Supabase → <strong>Connect</strong> button (bare <code>https://&lt;ref&gt;.supabase.co</code>)</td>
 </tr>
 <tr>
 <td><code>SUPABASE_SERVICE_KEY</code></td>
 <td>cloud storage secret key</td>
-<td>Supabase → Settings → API (service_role)</td>
+<td>Supabase → Settings → <strong>API Keys</strong> (Secret key, <code>sb_secret_…</code>)</td>
 </tr>
 <tr>
 <td><code>GOOGLE_CHAT_WEBHOOK_URL</code></td>
@@ -97,10 +97,10 @@
 );
 </code></pre>
 You should see &quot;Success. No rows returned.&quot; (No row-level-security setup needed — only our server touches this table, using the secret key. <code>updated_at</code> is <code>text</code> on purpose — it&#39;s the exact token the concurrent-edit conflict check compares.)</li>
-<li>Open <strong>Settings</strong> (gear icon, bottom-left) → <strong>API</strong>. Copy two things:<ul>
-<li><strong>Project URL</strong> → this is your <code>SUPABASE_URL</code></li>
-<li>Under <strong>Project API keys</strong>, the <strong><code>service_role</code></strong> key (click to reveal — it&#39;s the <em>secret</em> one, <strong>not</strong> <code>anon</code>) → this is your <code>SUPABASE_SERVICE_KEY</code></li>
-<li>⚠️ The <code>service_role</code> key is powerful — only ever paste it into a server env var, never share it or put it in client code. (Our app keeps it server-side.)</li>
+<li>Copy two things:<ul>
+<li><strong>Project URL</strong>: use the <strong>Connect</strong> button at the top of the project, or build it as <code>https://&lt;project-ref&gt;.supabase.co</code> → this is your <code>SUPABASE_URL</code>. Use the bare URL. If you paste the version ending in <code>/rest/v1</code> from the Data API page, requests fail with &quot;invalid path specified in request url&quot;.</li>
+<li><strong>Settings</strong> (gear icon) → <strong>API Keys</strong> → the <strong>Secret key</strong> (<code>sb_secret_…</code>, click to reveal; <em>not</em> the publishable key) → this is your <code>SUPABASE_SERVICE_KEY</code>. New projects no longer show a legacy <code>service_role</code> key by default. The secret key does the same job.</li>
+<li>⚠️ The secret key is powerful — only ever paste it into a server env var, never share it or put it in client code. (Our app keeps it server-side.)</li>
 </ul>
 </li>
 </ol>
@@ -154,6 +154,9 @@ You should see &quot;Success. No rows returned.&quot; (No row-level-security set
 <li><strong>Cost:</strong> each AI generation calls Anthropic and costs money. The password gate limits this to your team. Keep an eye on usage in the Anthropic console.</li>
 <li><strong>Storage fallback:</strong> if <code>SUPABASE_URL</code>/<code>SUPABASE_SERVICE_KEY</code> are missing, the app silently uses each browser&#39;s localStorage instead — so if diagrams aren&#39;t shared/persisting, check those two vars are set in Vercel.</li>
 </ul>
+<hr>
+<h2>Keeping the database awake</h2>
+<p>Supabase&#39;s free plan pauses a project after about 7 days without database activity, and a paused project does not wake on request. <code>.github/workflows/keepalive.yml</code> queries the app daily to prevent that. <strong>GitHub disables scheduled workflows in repos with no commits for 60 days</strong>, so if the repo goes quiet that long, re-enable the workflow from the Actions tab (or push any commit).</p>
 
 </div></body>
 </html>
